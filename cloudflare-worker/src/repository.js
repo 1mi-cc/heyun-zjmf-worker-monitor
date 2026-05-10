@@ -43,6 +43,11 @@ export class D1Repository {
     return (results || []).map((row) => ({ ...row, enabled: rowToBool(row, 'enabled') }));
   }
 
+  async getServer(id) {
+    const row = await this.db.prepare('SELECT * FROM servers WHERE id = ?1').bind(id).first();
+    return row ? { ...row, enabled: rowToBool(row, 'enabled') } : null;
+  }
+
   async listProviders() {
     const { results } = await this.db.prepare(
       'SELECT name, display_name, api_base_url, api_account, created_at, updated_at FROM providers ORDER BY name',
@@ -87,6 +92,16 @@ export class D1Repository {
       WHERE s.enabled = 1
       ORDER BY s.id
     `).all();
+    return results || [];
+  }
+
+  async listEvents(limit = 50) {
+    const { results } = await this.db.prepare(`
+      SELECT id,server_id,old_state,new_state,label,level,message,created_at
+      FROM events
+      ORDER BY id DESC
+      LIMIT ?1
+    `).bind(limit).all();
     return results || [];
   }
 

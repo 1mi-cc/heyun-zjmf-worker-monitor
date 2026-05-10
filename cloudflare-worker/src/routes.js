@@ -78,7 +78,12 @@ export async function handleRequest(request, env) {
       providers: await repo.listProviders(),
       servers: adminServers(await repo.listServers(), status),
       status,
+      events: await repo.listEvents(50),
     });
+  }
+
+  if (url.pathname === '/api/admin/events' && request.method === 'GET') {
+    return json({ events: await repo.listEvents(100) });
   }
 
   if (url.pathname === '/api/admin/run' && request.method === 'POST') {
@@ -103,7 +108,12 @@ export async function handleRequest(request, env) {
     const body = await readJson(request);
     if (!body?.id || !body?.name || !body?.provider) return json({ error: 'INVALID_SERVER' }, 400);
     if (!(await repo.getProvider(body.provider))) return json({ error: 'PROVIDER_NOT_FOUND' }, 400);
-    await repo.upsertServer(body, Math.floor(Date.now() / 1000));
+    const existing = await repo.getServer(body.id);
+    const nextServer = {
+      ...body,
+      ip: Object.hasOwn(body, 'ip') ? body.ip : existing?.ip || '',
+    };
+    await repo.upsertServer(nextServer, Math.floor(Date.now() / 1000));
     return json({ ok: true });
   }
 
