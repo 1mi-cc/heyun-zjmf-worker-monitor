@@ -23,6 +23,35 @@
 
 Cloudflare Worker 不能执行本机 ICMP `ping`，所以当前 Worker 版只支持 `api_only`。原 Python 里的 `ping_only`、`ping_then_api`、`api_then_ping` 不适用于 Worker。
 
+## 快速部署流程
+
+```powershell
+git clone https://github.com/loqwe/heyun-zjmf-worker-monitor.git
+cd heyun-zjmf-worker-monitor\cloudflare-worker
+npm test
+npx wrangler@latest login
+npx wrangler@latest d1 create zjmf-monitor
+```
+
+把 `d1 create` 输出里的 `database_id` 写入 `wrangler.toml`：
+
+```toml
+[[d1_databases]]
+binding = "DB"
+database_name = "zjmf-monitor"
+database_id = "你的 database_id"
+```
+
+继续部署：
+
+```powershell
+npx wrangler@latest secret put ADMIN_TOKEN
+npx wrangler@latest d1 migrations apply zjmf-monitor --remote
+npx wrangler@latest deploy
+```
+
+部署成功后访问 `https://你的-worker.workers.dev/` 查看 UI。
+
 ## 本地测试
 
 ```powershell
@@ -30,7 +59,7 @@ cd D:\自建功能\魔方财务V3通用云服务器监控异常重启\cloudflare
 npm test
 ```
 
-当前验证结果：`17` 个测试全部通过。
+当前验证结果：`20` 个测试全部通过。
 
 ## 部署前校验
 
@@ -38,7 +67,7 @@ npm test
 npx wrangler@latest deploy --dry-run --outdir .wrangler-dry-run
 ```
 
-当前已通过 dry-run 打包校验，上传包大小约 `22.39 KiB`。
+当前已通过 dry-run 打包校验，上传包大小约 `29.82 KiB`。
 
 ## 部署步骤
 

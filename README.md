@@ -23,6 +23,26 @@ cloudflare-worker/
 cloudflare-worker/README.md
 ```
 
+## Worker 快速部署
+
+```powershell
+git clone https://github.com/loqwe/heyun-zjmf-worker-monitor.git
+cd heyun-zjmf-worker-monitor\cloudflare-worker
+npm test
+npx wrangler@latest login
+npx wrangler@latest d1 create zjmf-monitor
+```
+
+然后把 `d1 create` 输出的 `database_id` 填入 `cloudflare-worker/wrangler.toml`，继续执行：
+
+```powershell
+npx wrangler@latest secret put ADMIN_TOKEN
+npx wrangler@latest d1 migrations apply zjmf-monitor --remote
+npx wrangler@latest deploy
+```
+
+部署完成后，用 `cloudflare-worker/README.md` 里的初始化命令添加服务商、服务器和 pushplus 通知。
+
 ## 架构
 
 ### 5状态机
