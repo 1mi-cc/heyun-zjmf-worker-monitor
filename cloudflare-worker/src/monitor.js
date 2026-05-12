@@ -60,6 +60,7 @@ export async function runMonitorOnce({ repo, fetcher = (input, init) => globalTh
   const settings = await repo.getSettings();
   const notifier = new Notifier(settings, fetcher);
   const rebootWindow = rebootWindowKey(date, settings.timezone || 'Asia/Shanghai');
+  const rebootWindowStart = now - 24 * 60 * 60;
   const servers = await repo.listEnabledServers();
   let checked = 0;
 
@@ -68,21 +69,24 @@ export async function runMonitorOnce({ repo, fetcher = (input, init) => globalTh
     if (!provider) continue;
     const client = new ZjmfClient(provider, fetcher, settings.api_timeout);
     const loadedRuntime = (await repo.getRuntime(server.id)) || createRuntime({ now });
+    const recentRebootCount = typeof repo.countRecentReboots === 'function'
+      ? await repo.countRecentReboots(server.id, rebootWindowStart)
+      : undefined;
     if (!force && loadedRuntime.last_check_time && now - loadedRuntime.last_check_time < settings.check_interval) continue;
     const probe = await probeServer({ client, server, fetcher, tcpConnector, now });
-    const withStatus = { ...loadedRuntime, last_status_value: probe.statusValue || '', last_check_time: now };
+    const withStatus = { ...loadedRuntime, reboot_count_today: recentRebootCount ?? loadedRuntime.reboot_count_today, last_status_value: probe.statusValue || '', last_check_time: now };
     let nextRuntime = advanceState(withStatus, probe.ok, settings, now);
     if (typeof repo.addCheckResult === 'function') {
       await repo.addCheckResult({ server_id: server.id, ok: probe.ok, latency_ms: probe.latencyMs || 0, status_value: probe.statusValue || '', error: probe.error || '', created_at: now });
     }
     await recordTransition(repo, notifier, server, loadedRuntime.state, nextRuntime, now);
 
-    if (shouldReboot(nextRuntime, server, settings, now, rebootWindow)) {
+    if (shouldReboot(nextRuntime, server, settings, now, rebootWindow, recentRebootCount)) {
       const rebooting = applyRebootStart(nextRuntime, now);
       await recordTransition(repo, notifier, server, nextRuntime.state, rebooting, now);
       const success = await client.hardReboot(server.id, now);
       if (success) {
-        const recovering = applyRebootSuccess(rebooting, now, rebootWindow);
+        const recovering = applyRebootSuccess(rebooting, now, rebootWindow, recentRebootCount);
         await recordTransition(repo, notifier, server, rebooting.state, recovering, now);
         nextRuntime = recovering;
       } else {

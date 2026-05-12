@@ -94,6 +94,18 @@ export class D1Repository {
       .run();
   }
 
+  async countRecentReboots(serverId, since) {
+    const row = await this.db.prepare(`
+      SELECT COUNT(*) AS count
+      FROM events
+      WHERE server_id = ?1
+        AND old_state = 'rebooting'
+        AND new_state = 'recovering'
+        AND created_at >= ?2
+    `).bind(serverId, since).first();
+    return Number(row?.count || 0);
+  }
+
   async listStatus() {
     const { results } = await this.db.prepare(`
       SELECT s.id, s.name, s.ip, s.provider, s.enabled, s.check_method, s.http_url, s.tcp_host, s.tcp_port,

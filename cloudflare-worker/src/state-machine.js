@@ -56,10 +56,15 @@ export function advanceState(runtime, health, settings, now) {
   return next;
 }
 
-export function shouldReboot(runtime, server, settings, now, rebootWindow) {
+function rebootCount(runtime, rebootWindow, recentRebootCount) {
+  if (Number.isFinite(recentRebootCount)) return recentRebootCount;
+  return runtime.reboot_date === rebootWindow ? runtime.reboot_count_today : 0;
+}
+
+export function shouldReboot(runtime, server, settings, now, rebootWindow, recentRebootCount) {
   if (runtime.state !== STATES.DOWN) return false;
   if (now - runtime.last_reboot_time < settings.reboot_cooldown) return false;
-  const count = runtime.reboot_date === rebootWindow ? runtime.reboot_count_today : 0;
+  const count = rebootCount(runtime, rebootWindow, recentRebootCount);
   const limit = server.daily_reboot_limit || settings.default_daily_reboot_limit;
   return limit <= 0 || count < limit;
 }
@@ -68,10 +73,10 @@ export function applyRebootStart(runtime, now) {
   return transition(runtime, STATES.REBOOTING, now);
 }
 
-export function applyRebootSuccess(runtime, now, rebootWindow) {
-  const rebootCount = runtime.reboot_date === rebootWindow ? runtime.reboot_count_today + 1 : 1;
+export function applyRebootSuccess(runtime, now, rebootWindow, recentRebootCount) {
+  const rebootCountAfterSuccess = rebootCount(runtime, rebootWindow, recentRebootCount) + 1;
   return transition(
-    { ...runtime, last_reboot_time: now, reboot_initiated_at: now, reboot_count_today: rebootCount, reboot_date: rebootWindow },
+    { ...runtime, last_reboot_time: now, reboot_initiated_at: now, reboot_count_today: rebootCountAfterSuccess, reboot_date: rebootWindow },
     STATES.RECOVERING,
     now,
   );

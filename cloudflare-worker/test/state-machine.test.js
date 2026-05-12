@@ -96,3 +96,19 @@ test('同 24 小时达到上限后阻止重启，下一天重新允许', () => {
   assert.equal(shouldReboot(runtime, server, settings, 1400, '2026-05-10'), false);
   assert.equal(shouldReboot(runtime, server, settings, 1400, '2026-05-11'), true);
 });
+
+test('24 小时窗口优先使用事件日志统计的最近重启次数', () => {
+  const runtime = createRuntime({
+    state: 'down',
+    last_reboot_time: 1000,
+    reboot_count_today: 3,
+    reboot_date: '2026-05-10',
+  });
+  const settings = { reboot_cooldown: 300, default_daily_reboot_limit: 3 };
+  const server = { daily_reboot_limit: 3 };
+
+  assert.equal(shouldReboot(runtime, server, settings, 2000, '2026-05-10', 1), true);
+
+  const next = applyRebootSuccess({ ...runtime, state: 'rebooting' }, 2000, '2026-05-10', 1);
+  assert.equal(next.reboot_count_today, 2);
+});
