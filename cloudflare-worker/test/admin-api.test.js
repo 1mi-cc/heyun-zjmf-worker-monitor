@@ -305,7 +305,19 @@ test('未完成初始化时根路径直接显示首次配置向导', async () =>
 
   assert.equal(res.status, 200);
   assert.match(text, /首次打开网站/);
+  assert.match(text, /开始初始化监控系统/);
+  assert.match(text, /确定进入/);
   assert.match(text, /ZJMF_ADMIN_TOKEN/);
+});
+
+test('未完成初始化时 /admin 也先显示首次确认弹窗', async () => {
+  const res = await handleRequest(new Request('https://worker.example/admin'), env());
+  const text = await res.text();
+
+  assert.equal(res.status, 200);
+  assert.match(text, /开始初始化监控系统/);
+  assert.match(text, /取消/);
+  assert.match(text, /确定进入/);
 });
 
 test('公共状态接口返回真实天级可用性和事件历史且不泄露地址', async () => {

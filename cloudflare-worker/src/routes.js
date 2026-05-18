@@ -107,7 +107,7 @@ export async function handleRequest(request, env) {
 
   if ((url.pathname === '/' || url.pathname === '/status') && request.method === 'GET') {
     if (url.pathname === '/' && (await repo.getSetting('setup_completed', '0')) !== '1') {
-      return new Response(renderAdminPage(), {
+      return new Response(renderAdminPage({ showIntro: true }), {
         headers: { 'content-type': 'text/html; charset=utf-8' },
       });
     }
@@ -117,7 +117,7 @@ export async function handleRequest(request, env) {
   }
 
   if (url.pathname === '/admin' && request.method === 'GET') {
-    return new Response(renderAdminPage(), {
+    return new Response(renderAdminPage({ showIntro: (await repo.getSetting('setup_completed', '0')) !== '1' }), {
       headers: { 'content-type': 'text/html; charset=utf-8' },
     });
   }
