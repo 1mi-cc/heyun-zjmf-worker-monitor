@@ -4,7 +4,7 @@
   "d1DatabaseName": "zjmf-monitor",
   "cloudflareAccountId": "",
 
-  // GitHub 仓库地址，首次安装脚本会从这里下载源码
+  // GitHub 仓库地址，一键安装脚本会从这里下载源码
   "upstreamRepo": "loqwe/heyun-zjmf-worker-monitor",
 
   // 管理后台网站密码；双击 BAT 交互部署时会要求输入两次

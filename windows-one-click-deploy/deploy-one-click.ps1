@@ -121,7 +121,7 @@ function Get-DefaultConfigText {
   "d1DatabaseName": "zjmf-monitor",
   "cloudflareAccountId": "",
 
-  // GitHub 仓库地址，首次安装脚本会从这里下载源码
+  // GitHub 仓库地址，一键安装脚本会从这里下载源码
   "upstreamRepo": "loqwe/heyun-zjmf-worker-monitor",
 
   // 管理后台网站密码；双击 BAT 交互部署时会要求输入两次
@@ -324,7 +324,7 @@ function Ensure-CloudflareAuth($Config) {
             Write-Step "Cloudflare 登录"
             Invoke-CommandLine (Get-WranglerCommand @("login")) | Out-Null
         }
-        throw "未填写 Cloudflare Account ID。请双击首次安装 BAT 输入，或在 one-click.config.jsonc 填写 cloudflareAccountId。"
+        throw "未填写 Cloudflare Account ID。请双击一键安装 BAT 输入，或在 one-click.config.jsonc 填写 cloudflareAccountId。"
     }
     $env:CLOUDFLARE_ACCOUNT_ID = $resolvedAccountId
     if ($configAccountId -ne $resolvedAccountId) {
