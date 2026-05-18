@@ -108,6 +108,30 @@ async function githubUpdateConfig(repo, env) {
   };
 }
 
+async function dayOrdinal(cfg, dateStr, sha) {
+  if (!dateStr || !sha) return { ordinal: 0, total: 0 };
+  const dt = new Date(dateStr);
+  if (isNaN(dt.getTime())) return { ordinal: 0, total: 0 };
+  const day = new Date(dt.getTime() + 8 * 3600 * 1000).toISOString().slice(0, 10);
+  const since = `${day}T00:00:00+08:00`;
+  const until = `${day}T23:59:59+08:00`;
+  const url = `https://api.github.com/repos/${cfg.repo}/commits?sha=${encodeURIComponent(cfg.branch)}&since=${encodeURIComponent(since)}&until=${encodeURIComponent(until)}&per_page=100`;
+  try {
+    const res = await cfg.fetcher(url, { headers: githubHeaders(cfg.token) });
+    if (!res.ok) return { ordinal: 0, total: 0 };
+    const list = await res.json();
+    if (!Array.isArray(list) || list.length === 0) return { ordinal: 0, total: 0 };
+    const idx = list.findIndex(c => {
+      const cSha = String(c.sha || '');
+      return cSha.startsWith(sha) || (sha && sha.startsWith(cSha));
+    });
+    if (idx < 0) return { ordinal: 0, total: list.length };
+    return { ordinal: list.length - idx, total: list.length };
+  } catch {
+    return { ordinal: 0, total: 0 };
+  }
+}
+
 function githubActionsUrl(repo, workflow) {
   return `https://github.com/${repo}/actions/workflows/${encodeURIComponent(workflow)}`;
 }
@@ -230,7 +254,20 @@ export async function handleRequest(request, env) {
     if (!res.ok) return json({ ok: false, configured: true, error: 'GITHUB_CHECK_FAILED', status: res.status }, 502);
     const data = await res.json();
     const latestSha = String(data.sha || '').trim();
+    const latestDate = String(data.commit?.committer?.date || data.commit?.author?.date || '');
     const currentSha = cfg.currentSha;
+    let currentDate = '';
+    if (currentSha) {
+      try {
+        const cur = await cfg.fetcher(`https://api.github.com/repos/${cfg.repo}/commits/${encodeURIComponent(currentSha)}`, { headers: githubHeaders(cfg.token) });
+        if (cur.ok) {
+          const curData = await cur.json();
+          currentDate = String(curData.commit?.committer?.date || curData.commit?.author?.date || '');
+        }
+      } catch {}
+    }
+    const latestOrd = await dayOrdinal(cfg, latestDate, latestSha);
+    const currentOrd = currentSha && currentDate ? await dayOrdinal(cfg, currentDate, currentSha) : { ordinal: 0, total: 0 };
     const updateAvailable = currentSha && latestSha ? !latestSha.startsWith(currentSha) && !currentSha.startsWith(latestSha) : null;
     return json({
       ok: true,
@@ -239,7 +276,13 @@ export async function handleRequest(request, env) {
       branch: cfg.branch,
       workflow: cfg.workflow,
       current_sha: currentSha,
+      current_date: currentDate,
+      current_ordinal: currentOrd.ordinal,
+      current_day_total: currentOrd.total,
       latest_sha: latestSha,
+      latest_date: latestDate,
+      latest_ordinal: latestOrd.ordinal,
+      latest_day_total: latestOrd.total,
       latest_message: String(data.commit?.message || '').split('\n')[0],
       update_available: updateAvailable,
       actions_url: githubActionsUrl(cfg.repo, cfg.workflow),

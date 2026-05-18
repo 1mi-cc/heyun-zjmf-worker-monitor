@@ -12,26 +12,28 @@ function readUtf8(relativePath) {
 }
 
 test('步骤1脚本写明 GitHub 仓库地址并复用为下载源', () => {
-  const wrapper = readUtf8('步骤1-一键安装脚本.bat');
+  const wrapperBytes = readFileSync(path.join(localScriptDir, '步骤1-一键安装脚本.bat'));
+  const wrapperLatin1 = wrapperBytes.toString('binary');
   const installer = readUtf8('步骤1-一键安装.bat');
 
-  assert.match(wrapper, /GitHub 仓库地址|UPSTREAM_REPO/);
-  assert.match(wrapper, /REAL_FILE=%CD%\\步骤1-一键安装\.bat/);
-  assert.doesNotMatch(wrapper, /REAL_FILE=%CD%\\step1-install\.bat/);
+  assert.match(wrapperLatin1, /UPSTREAM_REPO/);
+  assert.match(wrapperLatin1, /chcp 936/);
+  assert.match(wrapperLatin1, /REAL_FILE=/);
+  assert.match(wrapperLatin1, /releases\/download\/release-step1-bat-v1\/step1-install\.bat/);
   assert.match(installer, /GitHub 仓库地址|UPSTREAM_REPO/);
   assert.match(installer, /raw\.githubusercontent\.com/);
 });
 
-test('文档里的步骤1下载入口使用 Release 直链', () => {
+test('文档里的步骤1下载入口使用 main 分支 raw 直链', () => {
   const rootReadme = readFileSync(path.join(repoRoot, 'README.md'), 'utf8');
   const workerReadme = readFileSync(path.join(repoRoot, 'cloudflare-worker', 'README.md'), 'utf8');
   const usage = readUtf8('使用说明.txt');
-  const downloadUrl = /https:\/\/github\.com\/loqwe\/heyun-zjmf-worker-monitor\/releases\/download\/release-step1-bat-v1\/step1-install\.bat/;
+  const downloadUrl = /https:\/\/github\.com\/loqwe\/heyun-zjmf-worker-monitor\/raw\/main\/windows-one-click-deploy\/步骤1-一键安装脚本\.bat/;
 
   assert.match(rootReadme, downloadUrl);
   assert.match(workerReadme, downloadUrl);
   assert.match(usage, downloadUrl);
-  assert.match(rootReadme, /直接下载 `step1-install\.bat`/);
+  assert.match(rootReadme, /直接下载 `步骤1-一键安装脚本\.bat`/);
   assert.doesNotMatch(rootReadme, /htmlpreview\.github\.io/);
   assert.doesNotMatch(workerReadme, /htmlpreview\.github\.io/);
 });
