@@ -248,6 +248,32 @@ test('管理后台可以自动获取魔方财务产品列表', async () => {
   assert.equal(data.hosts[0].tcp_port, 996);
 });
 
+test('魔方财务产品列表 TCP 主机只使用接口返回的真实 IP', async () => {
+  const testEnv = env({
+    fetcher: async (url) => {
+      if (String(url).includes('login_api')) return new Response(JSON.stringify({ jwt: 'jwt-1' }));
+      return new Response(JSON.stringify({ data: { host: [
+        { id: '8564', hostname: 'ser0906873439', dedicatedip: '186.244.244.31', port: 996 },
+        { id: '8565', hostname: 'ser-no-ip', port: 996 },
+      ] } }));
+    },
+  });
+  const res = await handleRequest(new Request('https://worker.example/api/admin/zjmf/hosts', {
+    method: 'POST',
+    headers: { authorization: 'Bearer admin-password', 'content-type': 'application/json; charset=utf-8' },
+    body: JSON.stringify({ api_base_url: 'https://api.example/v1', api_account: 'acct', api_password: 'key' }),
+  }), testEnv);
+  const data = await res.json();
+
+  assert.equal(res.status, 200);
+  assert.equal(data.hosts[0].name, 'ser0906873439');
+  assert.equal(data.hosts[0].ip, '186.244.244.31');
+  assert.equal(data.hosts[0].tcp_host, '186.244.244.31');
+  assert.equal(data.hosts[1].name, 'ser-no-ip');
+  assert.equal(data.hosts[1].ip, '');
+  assert.equal(data.hosts[1].tcp_host, '');
+});
+
 test('初始化接口一次保存服务商、服务器、监控参数和通知设置', async () => {
   const testEnv = env();
   const res = await handleRequest(new Request('https://worker.example/api/admin/setup', {

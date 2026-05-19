@@ -79,6 +79,16 @@ function hostDisplayName(host) {
   return isIpAddress(name) || !name ? `服务器 #${id}` : String(name);
 }
 
+function hostIpAddress(host) {
+  const candidates = [
+    host.ip, host.main_ip, host.server_ip, host.dedicatedip, host.dedicated_ip,
+    host.ipaddress, host.ip_address, host.public_ip, host.ipv4, host.address,
+    host.hostname, host.domain,
+  ];
+  const value = candidates.find((item) => isIpAddress(item));
+  return value ? String(value) : '';
+}
+
 function normalizeRepo(value) {
   const text = String(value || '').trim().replace(/\.git$/i, '');
   const match = text.match(/github\.com[:/](.+\/.+)$/i);
@@ -155,7 +165,7 @@ function githubActionsUrl(repo, workflow) {
 
 function adminHost(host) {
   const id = host.id ?? host.hostid ?? host.product_id ?? host.uid ?? '';
-  const ip = host.ip || host.address || host.hostname || host.domain || '';
+  const ip = hostIpAddress(host);
   const tcpPort = host.tcp_port || host.port || host.service_port || host.listen_port || '';
   return {
     id: String(id),
