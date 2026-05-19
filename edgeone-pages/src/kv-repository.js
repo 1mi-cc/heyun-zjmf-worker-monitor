@@ -160,6 +160,14 @@ export class KVRepository {
     });
   }
 
+  async resetTutorialData() {
+    const state = await this.readState();
+    const adminTokenHash = state.settings.admin_token_hash || '';
+    const next = defaultState();
+    if (adminTokenHash) next.settings.admin_token_hash = adminTokenHash;
+    await this.writeState(next);
+  }
+
   async getRuntime(serverId) {
     const state = await this.readState();
     const row = state.runtimes[String(serverId)];

@@ -243,6 +243,15 @@ export class D1Repository {
     await this.db.prepare('DELETE FROM servers WHERE id = ?1').bind(id).run();
   }
 
+  async resetTutorialData() {
+    await this.db.prepare('DELETE FROM check_results').run();
+    await this.db.prepare('DELETE FROM events').run();
+    await this.db.prepare('DELETE FROM runtimes').run();
+    await this.db.prepare('DELETE FROM servers').run();
+    await this.db.prepare('DELETE FROM providers').run();
+    await this.db.prepare('DELETE FROM settings WHERE key != ?1').bind('admin_token_hash').run();
+  }
+
   async setSetting(key, value) {
     await this.db.prepare('INSERT INTO settings (key,value) VALUES (?1,?2) ON CONFLICT(key) DO UPDATE SET value=excluded.value')
       .bind(key, String(value))
