@@ -31,6 +31,16 @@ test('步骤2一键部署默认刷新源码缓存，避免部署旧版本', () =
   assert.match(deployer, /-Interactive -RefreshSource/);
 });
 
+test('步骤1会刷新部署脚本，源码下载优先使用 codeload', () => {
+  const installer = readUtf8('步骤1-一键安装.bat');
+  const script = readUtf8('deploy-one-click.ps1');
+
+  assert.doesNotMatch(installer, /if exist "%~1" exit \/b 0/);
+  assert.match(script, /codeload\.github\.com\/\$UpstreamRepo\/zip\/refs\/heads\/\$UpstreamRef/);
+  assert.match(script, /Invoke-DownloadFile/);
+  assert.match(script, /User-Agent/);
+});
+
 test('一键部署写入配置前等待新版管理接口就绪并隐藏布尔返回值', () => {
   const script = readUtf8('deploy-one-click.ps1');
 

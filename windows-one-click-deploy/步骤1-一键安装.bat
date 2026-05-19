@@ -53,9 +53,8 @@ call "%STEP2_FILE%" %*
 exit /b %ERRORLEVEL%
 
 :fetch
-if exist "%~1" exit /b 0
-echo 下载：%~3
-"%PS_EXE%" -NoProfile -ExecutionPolicy Bypass -Command "$ErrorActionPreference='Stop'; $ProgressPreference='SilentlyContinue'; [Net.ServicePointManager]::SecurityProtocol=[Net.SecurityProtocolType]::Tls12; Invoke-WebRequest -Uri '%~2' -OutFile '%~1' -UseBasicParsing"
+echo 下载/更新：%~3
+"%PS_EXE%" -NoProfile -ExecutionPolicy Bypass -Command "$ErrorActionPreference='Stop'; $ProgressPreference='SilentlyContinue'; [Net.ServicePointManager]::SecurityProtocol=[Net.SecurityProtocolType]::Tls12; $tmp='%~1.tmp'; if(Test-Path -LiteralPath $tmp){Remove-Item -LiteralPath $tmp -Force}; Invoke-WebRequest -Uri '%~2' -OutFile $tmp -UseBasicParsing; Move-Item -LiteralPath $tmp -Destination '%~1' -Force"
 exit /b %ERRORLEVEL%
 
 :check_dependencies

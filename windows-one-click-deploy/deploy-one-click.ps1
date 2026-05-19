@@ -17,6 +17,7 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 [Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false)
 [Console]::InputEncoding = [System.Text.UTF8Encoding]::new($false)
+[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 
 $Root = [System.IO.Path]::GetFullPath($PSScriptRoot)
 $Npx = if (Get-Command "npx.cmd" -ErrorAction SilentlyContinue) { "npx.cmd" } else { "npx" }
@@ -24,6 +25,18 @@ $WranglerPackage = "wrangler@$WranglerVersion"
 
 function Write-Step([string]$Message) { Write-Host ""; Write-Host "==> $Message" -ForegroundColor Cyan }
 function Write-Note([string]$Message) { Write-Host " -> $Message" -ForegroundColor DarkGray }
+function Invoke-DownloadFile([string]$Url, [string]$OutFile) {
+    if (Test-Path $OutFile) { Remove-Item -LiteralPath $OutFile -Force }
+    try {
+        Invoke-WebRequest -Uri $Url -OutFile $OutFile -TimeoutSec 180 -UseBasicParsing -Headers @{ "User-Agent" = "heyun-zjmf-worker-monitor-one-click" }
+        if (-not (Test-Path $OutFile) -or (Get-Item -LiteralPath $OutFile).Length -le 0) { throw "下载文件为空" }
+        return $true
+    } catch {
+        if (Test-Path $OutFile) { Remove-Item -LiteralPath $OutFile -Force }
+        Write-Note "当前地址失败：$($_.Exception.Message)"
+        return $false
+    }
+}
 function Get-ConfigValue($Config, [string]$Key, [string]$Default = "") {
     if ($Config.ContainsKey($Key) -and $null -ne $Config[$Key] -and -not [string]::IsNullOrWhiteSpace([string]$Config[$Key])) { return [string]$Config[$Key] }
     return $Default
@@ -259,14 +272,18 @@ function Resolve-WorkerRoot {
         New-Item -ItemType Directory -Path $CacheRoot -Force | Out-Null
         Write-Step "下载项目源码"
         $urls = @(
+            "https://codeload.github.com/$UpstreamRepo/zip/refs/heads/$UpstreamRef",
+            "https://codeload.github.com/$UpstreamRepo/zip/refs/tags/$UpstreamRef",
             "https://github.com/$UpstreamRepo/archive/refs/heads/$UpstreamRef.zip",
             "https://github.com/$UpstreamRepo/archive/refs/tags/$UpstreamRef.zip",
             "https://github.com/$UpstreamRepo/archive/$UpstreamRef.zip"
         )
+        $downloaded = $false
         foreach ($url in $urls) {
-            try { Write-Note "下载: $url"; Invoke-WebRequest -Uri $url -OutFile $zipPath -TimeoutSec 180; break } catch { Write-Note "当前地址失败，尝试下一个" }
+            Write-Note "下载: $url"
+            if (Invoke-DownloadFile $url $zipPath) { $downloaded = $true; break }
         }
-        if (-not (Test-Path $zipPath)) { throw "源码下载失败，请检查网络或使用 -SourceRoot 指定本地源码。" }
+        if (-not $downloaded) { throw "源码下载失败，请检查网络或使用 -SourceRoot 指定本地源码。" }
         Expand-Archive -Path $zipPath -DestinationPath $cacheSource -Force
     }
     foreach ($dir in Get-ChildItem -Path $cacheSource -Directory -Recurse) {
