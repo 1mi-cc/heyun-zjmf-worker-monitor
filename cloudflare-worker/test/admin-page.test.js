@@ -61,6 +61,7 @@ test('管理后台页面使用 ZJMF_ADMIN_TOKEN 登录且不嵌入真实密码',
   assert.match(html, /在状态页显示/);
   assert.match(html, /魔方财务 API/);
   assert.match(html, /HTTP\(S\)/);
+  assert.match(html, /留空则根据 TCP 主机自动生成/);
   assert.match(html, /TCP 端口/);
   assert.match(html, /HTTP 方法/);
   assert.match(html, /期望状态码/);
@@ -76,6 +77,9 @@ test('管理后台页面使用 ZJMF_ADMIN_TOKEN 登录且不嵌入真实密码',
   assert.match(html, /24 小时重启上限/);
   assert.doesNotMatch(html, /每小时重启上限|每日重启上限/);
   assert.match(html, /api_timeout:Math\.max/);
+  assert.match(html, /function autoFillHttpUrl/);
+  assert.match(html, /autoFillHttpUrl\(form\)/);
+  assert.match(html, /autoFillHttpUrl\(\$\('serverForm'\)\)/);
   assert.match(html, /name="api_password" type="text"/);
   assert.match(html, /id="editModal"/);
   assert.match(html, /保存服务商/);
@@ -101,6 +105,7 @@ test('管理后台页面使用 ZJMF_ADMIN_TOKEN 登录且不嵌入真实密码',
   assert.match(html, /resumeSetupBtn/);
   assert.match(html, /syncSelectedHost/);
   assert.doesNotMatch(html, /服务器 IP|1\.2\.3\.4/);
+  assert.doesNotMatch(html, /https:\/\/example\.com\/health/);
   assert.doesNotMatch(html, /super-secret-admin-password/);
   assert.doesNotMatch(html, /删除功能暂未开放/);
   assert.doesNotMatch(html, /定时重启|scheduled_reboot/);
