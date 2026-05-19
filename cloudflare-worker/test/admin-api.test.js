@@ -59,6 +59,7 @@ class FakeStatement {
   }
 
   async run() {
+    const sql = this.sql.trim();
     if (this.sql.includes('INSERT INTO providers')) {
       this.data.providerWrites.push({
         name: this.args[0],
@@ -90,6 +91,34 @@ class FakeStatement {
         level: this.args[4],
         message: this.args[5],
       });
+      return {};
+    }
+    if (sql === 'DELETE FROM check_results') {
+      this.data.dailyResults = [];
+      this.data.recentChecks = [];
+      return {};
+    }
+    if (sql === 'DELETE FROM events') {
+      this.data.events = [];
+      return {};
+    }
+    if (sql === 'DELETE FROM runtimes') {
+      this.data.deletedTables.push('runtimes');
+      return {};
+    }
+    if (sql === 'DELETE FROM servers') {
+      this.data.servers = [];
+      this.data.status = [];
+      return {};
+    }
+    if (sql === 'DELETE FROM providers') {
+      this.data.providers = [];
+      return {};
+    }
+    if (sql === 'DELETE FROM settings WHERE key != ?1') {
+      for (const key of Object.keys(this.data.settings)) {
+        if (key !== this.args[0]) delete this.data.settings[key];
+      }
       return {};
     }
     if (this.sql.includes('DELETE FROM runtimes')) {
@@ -135,7 +164,7 @@ function env(overrides = {}) {
         recover_timeout: '300',
         ...(overrides.settings || {}),
       },
-      providers: [
+      providers: overrides.providers || [
         {
           name: 'heyunidc',
           display_name: '核云',
@@ -147,6 +176,7 @@ function env(overrides = {}) {
       providerWrites: [],
       serverWrites: [],
       eventWrites: [],
+      deletedTables: [],
       deletedRuntimes: [],
       deletedServers: [],
       servers: overrides.servers || [{ id: '8564', name: '主服务器', ip: '203.0.113.10', provider: 'heyunidc', enabled: 1 }],
@@ -622,6 +652,59 @@ test('已有服务商保存时允许 API 密钥留空并保留旧密钥', async 
 
   assert.equal(res.status, 200);
   assert.equal(testEnv.DB.data.providerWrites[0].api_password, 'provider-secret');
+});
+
+test('重走初始教程会清空现有数据但保留管理密码', async () => {
+  const testEnv = env({ settings: { admin_token_hash: sha256('changed-password') } });
+  const res = await handleRequest(new Request('https://worker.example/api/admin/setup/reset', {
+    method: 'POST',
+    headers: { authorization: 'Bearer changed-password' },
+  }), testEnv);
+
+  assert.equal(res.status, 200);
+  assert.equal(testEnv.DB.data.providers.length, 0);
+  assert.equal(testEnv.DB.data.servers.length, 0);
+  assert.equal(testEnv.DB.data.events.length, 0);
+  assert.equal(testEnv.DB.data.dailyResults.length, 0);
+  assert.equal(testEnv.DB.data.recentChecks.length, 0);
+  assert.equal(testEnv.DB.data.settings.admin_token_hash, sha256('changed-password'));
+  assert.equal(testEnv.DB.data.settings.setup_completed, undefined);
+});
+
+test('保存服务器时会回退到现有服务商，避免 PROVIDER_NOT_FOUND', async () => {
+  const testEnv = env({
+    providers: [
+      {
+        name: 'heyunidc_186_244_244_31',
+        display_name: '核云 2',
+        api_base_url: 'https://api.example/v1',
+        api_account: 'account2@example.test',
+        api_password: 'provider-secret-2',
+      },
+    ],
+    servers: [{ id: '8564', name: '主服务器', ip: '203.0.113.10', provider: 'heyunidc_186_244_244_31', enabled: 1 }],
+  });
+  const res = await handleRequest(
+    new Request('https://worker.example/api/admin/servers', {
+      method: 'POST',
+      headers: {
+        authorization: 'Bearer admin-password',
+        'content-type': 'application/json; charset=utf-8',
+      },
+      body: JSON.stringify({
+        id: '8564',
+        name: '主服务器',
+        provider: 'heyunidc',
+        enabled: true,
+        check_method: 'http',
+        http_url: 'https://example.test/health',
+      }),
+    }),
+    testEnv,
+  );
+
+  assert.equal(res.status, 200);
+  assert.equal(testEnv.DB.data.serverWrites[0].provider, 'heyunidc_186_244_244_31');
 });
 
 test('系统更新检查会读取 GitHub 最新提交并返回更新状态', async () => {

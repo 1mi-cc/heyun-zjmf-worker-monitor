@@ -21,7 +21,9 @@ test('管理后台页面使用 ZJMF_ADMIN_TOKEN 登录且不嵌入真实密码',
   assert.match(html, /id="setupStep"/);
   assert.match(html, /下一步/);
   assert.match(html, /上一步/);
-  assert.match(html, /class="toplinks"[\s\S]*分析[\s\S]*状态页[\s\S]*退出登录/);
+  assert.match(html, /class="toplinks"[\s\S]*分析[\s\S]*状态页[\s\S]*重走初始教程[\s\S]*退出登录/);
+  assert.match(html, /data-action="restart-tutorial"/);
+  assert.match(html, /\/api\/admin\/setup\/reset/);
   assert.match(html, /自动获取产品列表/);
   assert.match(html, /导入选中服务器/);
   assert.match(html, /已导入服务器/);
@@ -30,6 +32,8 @@ test('管理后台页面使用 ZJMF_ADMIN_TOKEN 登录且不嵌入真实密码',
   assert.match(html, /魔方财务产品 ID/);
   assert.match(html, /当前选中服务器/);
   assert.match(html, /id="selectedHostPanel"/);
+  assert.match(html, /#selectedHostPanel\{padding:12px 14px\}/);
+  assert.match(html, /#selectedHostPanel \.grid2\{grid-template-columns:repeat\(4,minmax\(0,1fr\)\);gap:10px\}/);
   assert.match(html, /id="selectedHostIp"/);
   assert.match(html, /接口未返回 IP/);
   assert.match(html, /id="serverIdInput"[^>]*readonly/);
@@ -87,14 +91,15 @@ test('管理后台页面使用 ZJMF_ADMIN_TOKEN 登录且不嵌入真实密码',
   assert.match(html, /在状态页显示/);
   assert.match(html, /魔方财务 API/);
   assert.match(html, /HTTP\(S\)/);
-  assert.match(html, /留空则根据 TCP 主机自动生成/);
+  assert.match(html, /填一个能访问的域名\+端口\/网页地址/);
   assert.match(html, /TCP 端口/);
   assert.match(html, /HTTP 方法/);
   assert.match(html, /期望状态码/);
   assert.match(html, /name="http_method"/);
   assert.match(html, /name="http_expected_status"/);
   assert.match(html, /如果接口返回 IP，会自动带出 TCP 主机/);
-  assert.match(html, /三步检测：HTTP\(S\) \+ TCP \+ API/);
+  assert.match(html, /HTTP\(S\) \+ TCP \+ API/);
+  assert.doesNotMatch(html, /三步检测：HTTP\(S\) \+ TCP \+ API/);
   assert.match(html, /连续失败 3 次/);
   assert.match(html, /webhook_headers/);
   assert.match(html, /webhook_template/);

@@ -268,6 +268,11 @@ export async function handleRequest(request, env) {
     return json(await runMonitorOnce({ repo, fetcher: (input, init) => fetch(input, init), now, force: true }));
   }
 
+  if (url.pathname === '/api/admin/setup/reset' && request.method === 'POST') {
+    await repo.resetTutorialData();
+    return json({ ok: true });
+  }
+
   if (url.pathname === '/api/admin/notify/test' && request.method === 'POST') {
     const notifier = new Notifier(await repo.getSettings(), (input, init) => fetch(input, init));
     return json(await notifier.send('ZJMF 测试通知', '这是一条来自管理后台的测试通知。', 'info'));
@@ -412,11 +417,19 @@ export async function handleRequest(request, env) {
 
   if (url.pathname === '/api/admin/servers' && request.method === 'POST') {
     const body = await readJson(request);
-    if (!body?.id || !body?.name || !body?.provider) return json({ error: 'INVALID_SERVER' }, 400);
-    if (!(await repo.getProvider(body.provider))) return json({ error: 'PROVIDER_NOT_FOUND' }, 400);
+    if (!body?.id || !body?.name) return json({ error: 'INVALID_SERVER' }, 400);
     const existing = await repo.getServer(body.id);
+    const providers = await repo.listProviders();
+    const providerName = String(body?.provider || '').trim();
+    const provider = providers.some((item) => item.name === providerName)
+      ? providerName
+      : existing?.provider && providers.some((item) => item.name === existing.provider)
+        ? existing.provider
+        : providers[0]?.name || '';
+    if (!provider) return json({ error: 'PROVIDER_NOT_FOUND' }, 400);
     const nextServer = {
       ...body,
+      provider,
       ip: Object.hasOwn(body, 'ip') ? body.ip : existing?.ip || '',
       check_method: body.check_method || 'service_then_power',
       scheduled_reboot: '',
