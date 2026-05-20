@@ -156,4 +156,14 @@ test('管理后台页面使用 ZJMF_ADMIN_TOKEN 登录且不嵌入真实密码',
   assert.match(html, /<option value="service_then_power" selected>/);
   assert.match(html, /通知开关/);
   assert.match(html, /卡片式通知设置/);
+  assert.match(html, /<option value="bark">Bark/);
+  assert.match(html, /<option value="telegram">Telegram/);
+  assert.match(html, /<option value="feishu">飞书机器人/);
+  assert.match(html, /<option value="wecom">企业微信机器人/);
+  assert.match(html, /<option value="dingtalk">钉钉机器人/);
+  assert.match(html, /<option value="slack">Slack Webhook/);
+  assert.match(html, /<option value="discord">Discord Webhook/);
+  assert.match(html, /name="notify_token"/);
+  assert.match(html, /name="notify_target"/);
+  assert.match(html, /function syncNotifyFields/);
 });

@@ -49,6 +49,9 @@ export class D1Repository {
       webhook_headers: raw.webhook_headers || DEFAULT_SETTINGS.webhook_headers,
       webhook_template: raw.webhook_template || DEFAULT_SETTINGS.webhook_template,
       pushplus_token: raw.pushplus_token || '',
+      notify_token: raw.notify_token || raw.pushplus_token || DEFAULT_SETTINGS.notify_token,
+      notify_target: raw.notify_target || DEFAULT_SETTINGS.notify_target,
+      notify_secret: raw.notify_secret || DEFAULT_SETTINGS.notify_secret,
       timezone: raw.timezone || DEFAULT_SETTINGS.timezone,
       setup_completed: raw.setup_completed || '0',
     };

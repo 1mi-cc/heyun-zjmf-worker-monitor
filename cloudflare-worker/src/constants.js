@@ -27,6 +27,9 @@ export const DEFAULT_SETTINGS = Object.freeze({
   webhook_timeout: 10000,
   webhook_headers: '{\n  "Content-Type": "application/json"\n}',
   webhook_template: '{{message}}',
+  notify_token: '',
+  notify_target: '',
+  notify_secret: '',
 });
 
 export const TRANSITION_LABELS = Object.freeze({

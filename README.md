@@ -256,7 +256,7 @@ python server_monitor.py --interval 60
 | `tcp_then_api` | TCP 失败后再用魔方财务 API 复核 | 端口异常后再复核 |
 | `service_then_power` | 依次执行 HTTP(S)、TCP、API 三步检测；服务不可达时用 API 状态决定重启或开机 | 推荐用于自动恢复 |
 
-### Webhook通知类型
+### Webhook通知类型（Python 本地版）
 
 | 类型 | 说明 |
 |------|------|
@@ -264,6 +264,9 @@ python server_monitor.py --interval 60
 | `dingtalk` | 钉钉机器人 |
 | `wecom` | 企业微信机器人 |
 | `telegram` | Telegram Bot |
+
+> Cloudflare Worker / EdgeOne 版支持更多通知渠道：pushplus、Bark、Telegram、飞书机器人、企业微信机器人、钉钉机器人、Slack Webhook、Discord Webhook、自定义 Webhook。
+> 本地 Python 版当前保留 `custom`、`dingtalk`、`wecom`、`telegram`。
 
 ## 状态转换与通知
 

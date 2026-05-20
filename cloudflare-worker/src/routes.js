@@ -226,7 +226,12 @@ export async function handleRequest(request, env) {
     const settings = await repo.getSettings();
     const status = (await repo.listStatus()).map(publicServer);
     return json({
-      settings: { ...settings, pushplus_token: settings.pushplus_token ? '已配置' : '' },
+      settings: {
+        ...settings,
+        pushplus_token: settings.pushplus_token ? '已配置' : '',
+        notify_token: settings.notify_token || settings.pushplus_token ? '已配置' : '',
+        notify_secret: settings.notify_secret ? '已配置' : '',
+      },
       providers: await repo.listProviders(),
       servers: adminServers(await repo.listServers(), status),
       status,
@@ -398,6 +403,9 @@ export async function handleRequest(request, env) {
       await repo.setSetting('webhook_type', body.notification.type || 'pushplus');
       await repo.setSetting('webhook_url', body.notification.webhook_url || 'https://www.pushplus.plus/send');
       await repo.setSetting('pushplus_token', body.notification.pushplus_token || '');
+      await repo.setSetting('notify_token', body.notification.notify_token || body.notification.pushplus_token || '');
+      await repo.setSetting('notify_target', body.notification.notify_target || '');
+      await repo.setSetting('notify_secret', body.notification.notify_secret || '');
     }
     await repo.setSetting('setup_completed', '1');
     return json({ ok: true });

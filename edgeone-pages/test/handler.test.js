@@ -106,6 +106,16 @@ test('管理初始化弹窗支持滚动显示完整内容', async () => {
   assert.match(html, /#setupWizardModal \.setup-modal\{width:min\(1180px,calc\(100vw - 48px\)\);scrollbar-gutter:stable\}/);
   assert.match(html, /HTTP\(S\) \+ API（EdgeOne 选这个）/);
   assert.match(html, /HTTP\(S\) \+ TCP \+ API<\/option>/);
+  assert.match(html, /<option value="bark">Bark/);
+  assert.match(html, /<option value="telegram">Telegram/);
+  assert.match(html, /<option value="feishu">飞书机器人/);
+  assert.match(html, /<option value="wecom">企业微信机器人/);
+  assert.match(html, /<option value="dingtalk">钉钉机器人/);
+  assert.match(html, /<option value="slack">Slack Webhook/);
+  assert.match(html, /<option value="discord">Discord Webhook/);
+  assert.match(html, /name="notify_token"/);
+  assert.match(html, /name="notify_target"/);
+  assert.match(html, /function syncNotifyFields/);
   assert.match(html, /probeTcpField is-hidden/);
   assert.match(html, /#selectedHostPanel\{padding:12px 14px\}/);
   assert.match(html, /#selectedHostPanel \.grid2\{grid-template-columns:repeat\(4,minmax\(0,1fr\)\);gap:10px\}/);
@@ -148,6 +158,30 @@ test('EdgeOne 初始化默认使用 HTTP(S) + API', async () => {
   const data = await overview.json();
 
   assert.equal(data.servers[0].check_method, 'http_then_api');
+});
+
+test('EdgeOne 初始化会保存更多通知渠道字段并脱敏返回', async () => {
+  const kv = new MemoryKV();
+  const env = { ADMIN_TOKEN: 'admin', ZJMF_KV: kv };
+  const headers = { authorization: 'Bearer admin', 'content-type': 'application/json; charset=utf-8' };
+  await handleEdgeOneRequest(new Request('https://edgeone.example/api/admin/setup', {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({
+      providers: [],
+      servers: [],
+      settings: {},
+      notification: { enabled: true, type: 'telegram', notify_token: 'bot-token', notify_target: '10086' },
+    }),
+  }), env);
+  const overview = await handleEdgeOneRequest(new Request('https://edgeone.example/api/admin/overview', {
+    headers: { authorization: 'Bearer admin' },
+  }), env);
+  const data = await overview.json();
+
+  assert.equal(data.settings.webhook_type, 'telegram');
+  assert.equal(data.settings.notify_token, '已配置');
+  assert.equal(data.settings.notify_target, '10086');
 });
 
 test('管理面板顶部提供重走初始教程入口', async () => {
@@ -221,10 +255,10 @@ test('保存服务器时自动使用已有服务商', async () => {
     headers,
     body: JSON.stringify({
       providers: [{
-        name: 'heyunidc_18817567790',
+        name: 'heyunidc_demo_account',
         display_name: '核云',
         api_base_url: 'https://api.example/v1',
-        api_account: '18817567790',
+        api_account: 'demo@example.com',
         api_password: 'secret',
       }],
       servers: [],
@@ -245,5 +279,5 @@ test('保存服务器时自动使用已有服务商', async () => {
   }), env);
   const data = await overview.json();
 
-  assert.equal(data.servers[0].provider, 'heyunidc_18817567790');
+  assert.equal(data.servers[0].provider, 'heyunidc_demo_account');
 });
