@@ -20,7 +20,8 @@ EdgeOne Pages
 - 公共 API：`/api/status`
 - 管理 API：`/api/admin/*`
 - 魔方财务 API 检测、HTTP(S) 检测
-- EdgeOne 版不能做原生 TCP 检测；初始化检测方式建议选 **HTTP(S) + API（EdgeOne 选这个）**
+- EdgeOne 版不能做原生 TCP 检测；默认检测方式是 **HTTP(S) + API（EdgeOne 选这个）**
+- Cloudflare Worker 版默认检测方式是 **HTTP(S) + TCP + API（Cloudflare Worker 选这个）**
 - 连续失败 3 次后自动重启或开机
 - pushplus、Bark、Telegram、飞书机器人、企业微信机器人、钉钉机器人、Slack Webhook、Discord Webhook、自定义 Webhook 通知
 

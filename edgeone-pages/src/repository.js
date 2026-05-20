@@ -12,8 +12,12 @@ function boolSetting(value, fallback) {
   return normalized === '1' || normalized === 'true' || normalized === 'on' || normalized === 'yes';
 }
 
-function rowToBool(row, key) {
-  return Number(row[key]) === 1;
+function rowToBool(row, key, fallback = false) {
+  return boolSetting(row[key], fallback);
+}
+
+function serverRow(row) {
+  return { ...row, enabled: rowToBool(row, 'enabled'), visible_on_status: rowToBool(row, 'visible_on_status', true) };
 }
 
 function placeholders(values, start = 1) {
@@ -69,17 +73,17 @@ export class D1Repository {
 
   async listEnabledServers() {
     const { results } = await this.db.prepare('SELECT * FROM servers WHERE enabled = 1 ORDER BY id').all();
-    return (results || []).map((row) => ({ ...row, enabled: rowToBool(row, 'enabled') }));
+    return (results || []).map(serverRow);
   }
 
   async listServers() {
     const { results } = await this.db.prepare('SELECT * FROM servers ORDER BY id').all();
-    return (results || []).map((row) => ({ ...row, enabled: rowToBool(row, 'enabled') }));
+    return (results || []).map(serverRow);
   }
 
   async getServer(id) {
     const row = await this.db.prepare('SELECT * FROM servers WHERE id = ?1').bind(id).first();
-    return row ? { ...row, enabled: rowToBool(row, 'enabled') } : null;
+    return row ? serverRow(row) : null;
   }
 
   async listProviders() {
@@ -160,7 +164,7 @@ export class D1Repository {
 
   async listStatus() {
     const { results } = await this.db.prepare(`
-      SELECT s.id, s.name, s.ip, s.provider, s.enabled, s.check_method, s.http_url, s.tcp_host, s.tcp_port,
+      SELECT s.id, s.name, s.ip, s.provider, s.enabled, s.visible_on_status, s.check_method, s.http_url, s.tcp_host, s.tcp_port,
              r.state, r.last_status_value, r.last_check_time, r.last_reboot_time, r.reboot_count_today,
              cr.latency_ms AS last_latency_ms
       FROM servers s
@@ -240,10 +244,10 @@ export class D1Repository {
 
   async upsertServer(server, now) {
     await this.db.prepare(`
-      INSERT INTO servers (id,name,ip,provider,check_method,enabled,daily_reboot_limit,scheduled_reboot,http_url,http_method,http_expected_status,tcp_host,tcp_port,probe_timeout_ms,recovery_action,created_at,updated_at)
-      VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?16)
-      ON CONFLICT(id) DO UPDATE SET name=excluded.name,ip=excluded.ip,provider=excluded.provider,check_method=excluded.check_method,enabled=excluded.enabled,daily_reboot_limit=excluded.daily_reboot_limit,scheduled_reboot=excluded.scheduled_reboot,http_url=excluded.http_url,http_method=excluded.http_method,http_expected_status=excluded.http_expected_status,tcp_host=excluded.tcp_host,tcp_port=excluded.tcp_port,probe_timeout_ms=excluded.probe_timeout_ms,recovery_action=excluded.recovery_action,updated_at=excluded.updated_at
-    `).bind(server.id, server.name, server.ip || '', server.provider, server.check_method || 'service_then_power', server.enabled === false ? 0 : 1, server.daily_reboot_limit || 0, '', server.http_url || '', server.http_method || 'GET', server.http_expected_status || '200-399', server.tcp_host || '', Number(server.tcp_port || 0), Number(server.probe_timeout_ms || 10000), server.recovery_action || 'reboot', now).run();
+      INSERT INTO servers (id,name,ip,provider,check_method,enabled,visible_on_status,daily_reboot_limit,scheduled_reboot,http_url,http_method,http_expected_status,tcp_host,tcp_port,probe_timeout_ms,recovery_action,created_at,updated_at)
+      VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?17)
+      ON CONFLICT(id) DO UPDATE SET name=excluded.name,ip=excluded.ip,provider=excluded.provider,check_method=excluded.check_method,enabled=excluded.enabled,visible_on_status=excluded.visible_on_status,daily_reboot_limit=excluded.daily_reboot_limit,scheduled_reboot=excluded.scheduled_reboot,http_url=excluded.http_url,http_method=excluded.http_method,http_expected_status=excluded.http_expected_status,tcp_host=excluded.tcp_host,tcp_port=excluded.tcp_port,probe_timeout_ms=excluded.probe_timeout_ms,recovery_action=excluded.recovery_action,updated_at=excluded.updated_at
+    `).bind(server.id, server.name, server.ip || '', server.provider, server.check_method || 'service_then_power', server.enabled === false ? 0 : 1, boolSetting(server.visible_on_status, true) ? 1 : 0, server.daily_reboot_limit || 0, '', server.http_url || '', server.http_method || 'GET', server.http_expected_status || '200-399', server.tcp_host || '', Number(server.tcp_port || 0), Number(server.probe_timeout_ms || 10000), server.recovery_action || 'reboot', now).run();
   }
 
   async deleteServer(id) {

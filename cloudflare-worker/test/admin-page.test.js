@@ -89,6 +89,7 @@ test('管理后台页面使用 ZJMF_ADMIN_TOKEN 登录且不嵌入真实密码',
   assert.match(html, /name="webhook_name"/);
   assert.doesNotMatch(html, /<input value="pushplus" disabled>/);
   assert.match(html, /在状态页显示/);
+  assert.match(html, /name="visible_on_status" type="hidden" value="false"/);
   assert.match(html, /魔方财务 API/);
   assert.match(html, /HTTP\(S\)/);
   assert.match(html, /填一个能访问的域名\+端口\/网页地址/);
@@ -98,7 +99,7 @@ test('管理后台页面使用 ZJMF_ADMIN_TOKEN 登录且不嵌入真实密码',
   assert.match(html, /name="http_method"/);
   assert.match(html, /name="http_expected_status"/);
   assert.match(html, /如果接口返回 IP，会自动带出 TCP 主机/);
-  assert.match(html, /HTTP\(S\) \+ TCP \+ API/);
+  assert.match(html, /HTTP\(S\) \+ TCP \+ API（Cloudflare Worker 选这个）/);
   assert.doesNotMatch(html, /三步检测：HTTP\(S\) \+ TCP \+ API/);
   assert.match(html, /连续失败 3 次/);
   assert.match(html, /webhook_headers/);

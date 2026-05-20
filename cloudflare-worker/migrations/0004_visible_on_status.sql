@@ -1,0 +1,1 @@
+ALTER TABLE servers ADD COLUMN visible_on_status INTEGER NOT NULL DEFAULT 1;

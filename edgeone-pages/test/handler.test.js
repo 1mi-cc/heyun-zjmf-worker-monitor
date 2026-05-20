@@ -104,8 +104,9 @@ test('管理初始化弹窗支持滚动显示完整内容', async () => {
 
   assert.match(html, /#setupWizardModal,#notifyModal,#editModal\{align-items:start;overflow:auto\}/);
   assert.match(html, /#setupWizardModal \.setup-modal\{width:min\(1180px,calc\(100vw - 48px\)\);scrollbar-gutter:stable\}/);
+  assert.match(html, /name="visible_on_status" type="hidden" value="false"/);
   assert.match(html, /HTTP\(S\) \+ API（EdgeOne 选这个）/);
-  assert.match(html, /HTTP\(S\) \+ TCP \+ API<\/option>/);
+  assert.match(html, /HTTP\(S\) \+ TCP \+ API（Cloudflare Worker 选这个）<\/option>/);
   assert.match(html, /统计窗口/);
   assert.match(html, /<option value="hour" selected>每小时/);
   assert.doesNotMatch(html, /支持的通知渠道/);
@@ -294,4 +295,35 @@ test('保存服务器时自动使用已有服务商', async () => {
   const data = await overview.json();
 
   assert.equal(data.servers[0].provider, 'heyunidc_demo_account');
+});
+
+test('EdgeOne 公共状态接口隐藏不在状态页显示的服务器', async () => {
+  const kv = new MemoryKV();
+  const env = { ADMIN_TOKEN: 'admin', ZJMF_KV: kv };
+  const headers = {
+    authorization: 'Bearer admin',
+    'content-type': 'application/json; charset=utf-8',
+  };
+  await handleEdgeOneRequest(new Request('https://edgeone.example/api/admin/setup', {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({
+      providers: [{
+        name: 'heyunidc',
+        display_name: '核云',
+        api_base_url: 'https://api.example/v1',
+        api_account: 'demo@example.com',
+        api_password: 'secret',
+      }],
+      servers: [{ id: '1001', name: '隐藏服务器', provider: 'heyunidc', visible_on_status: false }],
+      settings: {},
+      notification: { enabled: false },
+    }),
+  }), env);
+
+  const res = await handleEdgeOneRequest(new Request('https://edgeone.example/api/status'), env);
+  const data = await res.json();
+
+  assert.equal(res.status, 200);
+  assert.equal(data.servers.length, 0);
 });

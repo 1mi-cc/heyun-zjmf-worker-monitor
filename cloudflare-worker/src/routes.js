@@ -15,6 +15,15 @@ function boolValue(value) {
   return ['1', 'true', 'on', 'yes'].includes(String(value ?? '').trim().toLowerCase());
 }
 
+function boolValueWithDefault(value, fallback = true) {
+  if (value == null || value === '') return fallback;
+  return boolValue(value);
+}
+
+function visibleOnStatus(server) {
+  return boolValueWithDefault(server?.visible_on_status, true);
+}
+
 async function sha256Hex(value) {
   const bytes = new TextEncoder().encode(String(value));
   const digest = await crypto.subtle.digest('SHA-256', bytes);
@@ -52,7 +61,7 @@ function serverDisplayName(server) {
 }
 
 function publicServer(server) {
-  const { ip: _ip, http_url: _httpUrl, tcp_host: _tcpHost, ...rest } = server;
+  const { ip: _ip, http_url: _httpUrl, tcp_host: _tcpHost, visible_on_status: _visible, ...rest } = server;
   return { ...rest, name: serverDisplayName(server) };
 }
 
@@ -181,7 +190,7 @@ function adminHost(host) {
 }
 
 async function publicStatus(repo) {
-  const servers = (await repo.listStatus()).map(publicServer);
+  const servers = (await repo.listStatus()).filter(visibleOnStatus).map(publicServer);
   const ids = servers.map((server) => String(server.id));
   const daily = await repo.listDailyHistory(ids);
   const events = await repo.listPublicEvents(ids);
@@ -394,6 +403,7 @@ export async function handleRequest(request, env) {
         name: item.name || `服务器 #${item.id}`,
         provider: item.provider || firstProvider.name || 'heyunidc',
         check_method: item.check_method || 'service_then_power',
+        visible_on_status: boolValueWithDefault(item.visible_on_status, true),
         enabled: true,
         daily_reboot_limit: Number(item.daily_reboot_limit || 3),
         probe_timeout_ms: Number(item.probe_timeout_ms || body.settings?.api_timeout_ms || 10000),
@@ -445,6 +455,9 @@ export async function handleRequest(request, env) {
       provider,
       ip: Object.hasOwn(body, 'ip') ? body.ip : existing?.ip || '',
       check_method: body.check_method || 'service_then_power',
+      visible_on_status: Object.hasOwn(body, 'visible_on_status')
+        ? boolValueWithDefault(body.visible_on_status, true)
+        : boolValueWithDefault(existing?.visible_on_status, true),
       scheduled_reboot: '',
     };
     await repo.upsertServer(nextServer, Math.floor(Date.now() / 1000));

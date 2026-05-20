@@ -78,9 +78,10 @@ class FakeStatement {
         provider: this.args[3],
         check_method: this.args[4],
         enabled: this.args[5],
-        scheduled_reboot: this.args[7],
-        http_url: this.args[8],
-        tcp_port: this.args[12],
+        visible_on_status: this.args[6],
+        scheduled_reboot: this.args[8],
+        http_url: this.args[9],
+        tcp_port: this.args[13],
       });
       return {};
     }
@@ -180,13 +181,14 @@ function env(overrides = {}) {
       deletedRuntimes: [],
       deletedServers: [],
       servers: overrides.servers || [{ id: '8564', name: '主服务器', ip: '203.0.113.10', provider: 'heyunidc', enabled: 1 }],
-      status: [{
+      status: Object.hasOwn(overrides, 'status') ? overrides.status : [{
         id: '8564',
         name: '203.0.113.10',
         ip: '203.0.113.10',
         http_url: 'https://203.0.113.10/health',
         tcp_host: '203.0.113.10',
         tcp_port: 443,
+        visible_on_status: 1,
         state: 'healthy',
         last_status_value: 'on',
       }],
@@ -500,6 +502,29 @@ test('公共状态接口不返回服务器 IP', async () => {
   assert.doesNotMatch(text, /203\.0\.113\.10/);
 });
 
+test('公共状态接口隐藏不在状态页显示的服务器', async () => {
+  const res = await handleRequest(new Request('https://worker.example/api/status'), env({
+    servers: [
+      { id: '8564', name: '主服务器', ip: '203.0.113.10', provider: 'heyunidc', enabled: 1, visible_on_status: 0 },
+    ],
+    status: [{
+      id: '8564',
+      name: '203.0.113.10',
+      ip: '203.0.113.10',
+      http_url: 'https://203.0.113.10/health',
+      tcp_host: '203.0.113.10',
+      tcp_port: 443,
+      state: 'healthy',
+      last_status_value: 'on',
+      visible_on_status: 0,
+    }],
+  }));
+  const data = await res.json();
+
+  assert.equal(res.status, 200);
+  assert.equal(data.servers.length, 0);
+});
+
 test('未完成初始化时根路径直接显示首次配置向导', async () => {
   const res = await handleRequest(new Request('https://worker.example/'), env());
   const text = await res.text();
@@ -599,6 +624,29 @@ test('管理后台保存服务器时清空旧定时重启配置', async () => {
   assert.equal(testEnv.DB.data.serverWrites[0].check_method, 'http');
   assert.equal(testEnv.DB.data.serverWrites[0].http_url, 'https://example.test/health');
   assert.equal(testEnv.DB.data.serverWrites[0].tcp_port, 443);
+});
+
+test('管理后台保存服务器时会写入 visible_on_status', async () => {
+  const testEnv = env();
+  const res = await handleRequest(
+    new Request('https://worker.example/api/admin/servers', {
+      method: 'POST',
+      headers: {
+        authorization: 'Bearer admin-password',
+        'content-type': 'application/json; charset=utf-8',
+      },
+      body: JSON.stringify({
+        id: '8564',
+        name: '主服务器',
+        provider: 'heyunidc',
+        visible_on_status: false,
+      }),
+    }),
+    testEnv,
+  );
+
+  assert.equal(res.status, 200);
+  assert.equal(testEnv.DB.data.serverWrites[0].visible_on_status, 0);
 });
 
 test('管理后台删除监控项会删除配置和运行状态并写入日志', async () => {

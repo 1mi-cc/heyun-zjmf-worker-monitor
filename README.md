@@ -50,7 +50,7 @@
 
 KV 绑定：打开 **KV 存储**，变量名称填 `ZJMF_KV`；命名空间名称随意，例如 `zjmf`。如果还没有命名空间，先点击 **创建命名空间**。
 
-说明：EdgeOne 版使用 Edge Functions + KV 保存配置和事件，定时监控由外部定时器调用 `/api/admin/run`。首次部署后仍需在 EdgeOne 控制台绑定 KV 到变量名 `ZJMF_KV`。EdgeOne 版不能做原生 TCP 检测，初始化检测方式建议选 **HTTP(S) + API（EdgeOne 选这个）**。不要改成 `cloud-functions/`，否则 KV 绑定不会注入。
+说明：EdgeOne 版使用 Edge Functions + KV 保存配置和事件，定时监控由外部定时器调用 `/api/admin/run`。首次部署后仍需在 EdgeOne 控制台绑定 KV 到变量名 `ZJMF_KV`。EdgeOne 版不能做原生 TCP 检测，默认检测方式是 **HTTP(S) + API（EdgeOne 选这个）**；Cloudflare Worker 版默认检测方式是 **HTTP(S) + TCP + API（Cloudflare Worker 选这个）**。不要改成 `cloud-functions/`，否则 KV 绑定不会注入。
 
 详细说明见 `edgeone-pages/README.md`。
 
@@ -249,14 +249,16 @@ python server_monitor.py --interval 60
 
 ### 检测方式
 
+默认选择：Cloudflare Worker 版选择 **HTTP(S) + TCP + API（Cloudflare Worker 选这个）**；EdgeOne Pages 版选择 **HTTP(S) + API（EdgeOne 选这个）**。
+
 | 方式 | 说明 | 适用场景 |
 |------|------|----------|
 | `api_only` | 只通过API检测（推荐） | 有API，最准确 |
 | `http` | 通过 HTTP(S) 状态码检测 | 网站/API 健康检查 |
 | `tcp` | 通过 TCP 端口连接检测 | 检查 80/443/数据库等端口 |
-| `http_then_api` | HTTP 失败后再用魔方财务 API 复核 | 降低误判后再重启 |
+| `http_then_api` | HTTP 失败后再用魔方财务 API 复核 | EdgeOne Pages 默认推荐 |
 | `tcp_then_api` | TCP 失败后再用魔方财务 API 复核 | 端口异常后再复核 |
-| `service_then_power` | 依次执行 HTTP(S)、TCP、API 三步检测；服务不可达时用 API 状态决定重启或开机 | 推荐用于自动恢复 |
+| `service_then_power` | 依次执行 HTTP(S)、TCP、API 三步检测；服务不可达时用 API 状态决定重启或开机 | Cloudflare Worker 默认推荐 |
 
 ### 支持的通知渠道（Cloudflare Worker / EdgeOne）
 
