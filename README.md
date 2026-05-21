@@ -73,9 +73,6 @@ KV 绑定：打开 **KV 存储**，变量名填 `ZJMF_KV`，值选择或创建 `
    | `CLOUDFLARE_API_TOKEN` | 第 2 步复制的 Token | 必填 |
    | `ZJMF_ADMIN_TOKEN` | 管理后台网站密码 | 必填 |
    | `CLOUDFLARE_ACCOUNT_ID` | Cloudflare 账户 ID | 推荐，多账号时必填 |
-   | `ZJMF_API_ACCOUNT` | 魔方财务登录邮箱或手机号 | 可选，用于首次自动初始化 |
-   | `ZJMF_API_PASSWORD` | 魔方财务 API 密钥 | 可选，用于首次自动初始化 |
-   | `ZJMF_SERVER_ID` | 魔方财务产品 ID | 可选，用于首次自动初始化 |
    | `WEB_UPDATE_GITHUB_TOKEN` | GitHub Fine-grained Token，用于管理后台点“确定更新”触发 Actions | 可选，不填只能检查更新 |
 
 5. 进入 **Actions → Deploy to Cloudflare → Run workflow**。
