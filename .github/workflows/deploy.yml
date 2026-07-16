@@ -17,8 +17,8 @@ jobs:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       ADMIN_TOKEN: ${{ secrets.ZJMF_ADMIN_TOKEN || secrets.UPTIMER_ADMIN_TOKEN }}
-      WORKER_NAME: ${{ vars.WORKER_NAME || 'zjmf-monitor' }}
-      D1_DATABASE_NAME: ${{ vars.D1_DATABASE_NAME || 'zjmf-monitor' }}
+      WORKER_NAME: ${{ vars.WORKER_NAME || '1mi-heyun-monitor' }}
+      D1_DATABASE_NAME: ${{ vars.D1_DATABASE_NAME || '1mi-heyun-monitor' }}
       APP_VERSION: ${{ github.sha }}
       GITHUB_BRANCH: ${{ github.ref_name }}
       GITHUB_WORKFLOW_FILE: deploy.yml
