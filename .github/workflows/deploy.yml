@@ -82,3 +82,5 @@ jobs:
 
       - name: Seed runtime config
         run: node scripts/seed-worker.mjs "${{ steps.deploy.outputs.worker_url }}"
+
+# Trigger deployment after enabling Actions.
