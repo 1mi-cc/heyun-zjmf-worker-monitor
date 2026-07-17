@@ -1,6 +1,3 @@
-Exit code: 0
-Wall time: 0.4 seconds
-Output:
 import { runMonitorOnce } from './monitor.js';
 import { D1Repository } from './repository.js';
 import { Notifier } from './notifier.js';
@@ -60,7 +57,7 @@ function isIpAddress(value) {
 }
 
 function serverDisplayName(server) {
-  return isIpAddress(server.name) || isIpAddress(server.ip) ? `鏈嶅姟鍣?#${server.id}` : server.name;
+  return isIpAddress(server.name) || isIpAddress(server.ip) ? `服务器 #${server.id}` : server.name;
 }
 
 function publicServer(server) {
@@ -91,7 +88,7 @@ function adminServers(servers, status) {
 function hostDisplayName(host) {
   const id = host.id ?? host.hostid ?? host.product_id ?? host.uid ?? '';
   const name = host.name || host.title || host.domain || host.hostname || '';
-  return isIpAddress(name) || !name ? `鏈嶅姟鍣?#${id}` : String(name);
+  return isIpAddress(name) || !name ? `服务器 #${id}` : String(name);
 }
 
 function hostIpAddress(host) {
@@ -243,9 +240,9 @@ export async function handleRequest(request, env) {
     return json({
       settings: {
         ...settings,
-        pushplus_token: settings.pushplus_token ? '宸查厤缃? : '',
-        notify_token: settings.notify_token || settings.pushplus_token ? '宸查厤缃? : '',
-        notify_secret: settings.notify_secret ? '宸查厤缃? : '',
+        pushplus_token: settings.pushplus_token ? '已配置' : '',
+        notify_token: settings.notify_token || settings.pushplus_token ? '已配置' : '',
+        notify_secret: settings.notify_secret ? '已配置' : '',
       },
       providers: await repo.listProviders(),
       servers: adminServers(await repo.listServers(), status),
@@ -295,13 +292,13 @@ export async function handleRequest(request, env) {
 
   if (url.pathname === '/api/admin/notify/test' && request.method === 'POST') {
     const notifier = new Notifier(await repo.getSettings(), (input, init) => fetch(input, init));
-    const result = await notifier.send('ZJMF 娴嬭瘯閫氱煡', '杩欐槸涓€鏉℃潵鑷鐞嗗悗鍙扮殑娴嬭瘯閫氱煡銆?, 'info');
+    const result = await notifier.send('ZJMF 测试通知', '这是一条来自管理后台的测试通知。', 'info');
     return json(result, result.ok ? 200 : 502);
   }
 
   if (url.pathname === '/api/admin/update/check' && request.method === 'GET') {
     const cfg = await githubUpdateConfig(repo, env);
-    if (!cfg.repo) return json({ ok: true, configured: false, message: '鏈厤缃?GitHub 浠撳簱' });
+    if (!cfg.repo) return json({ ok: true, configured: false, message: '未配置 GitHub 仓库' });
     const latestUrl = `https://api.github.com/repos/${cfg.repo}/commits/${encodeURIComponent(cfg.branch)}`;
     const res = await cfg.fetcher(latestUrl, { headers: githubHeaders(cfg.token) });
     if (!res.ok) {
@@ -393,18 +390,18 @@ export async function handleRequest(request, env) {
       if (batchMode && item.provider && !providerNames.has(item.provider)) missing.push(`${prefix}.provider`);
     });
     if (missing.length) {
-      return json({ error: 'INVALID_SETUP', message: '鍒濆鍖栦俊鎭笉瀹屾暣', missing }, 400);
+      return json({ error: 'INVALID_SETUP', message: '初始化信息不完整', missing }, 400);
     }
     const now = Math.floor(Date.now() / 1000);
     const firstProvider = providers[0] || provider;
     const firstServer = servers[0] || server;
     for (const item of providers) {
-      await repo.upsertProvider({ ...item, name: item.name || firstProvider.name || 'heyunidc', display_name: item.display_name || '鏍镐簯' }, now);
+      await repo.upsertProvider({ ...item, name: item.name || firstProvider.name || 'heyunidc', display_name: item.display_name || '核云' }, now);
     }
     for (const item of servers) {
       await repo.upsertServer({
         ...item,
-        name: item.name || `鏈嶅姟鍣?#${item.id}`,
+        name: item.name || `服务器 #${item.id}`,
         provider: item.provider || firstProvider.name || 'heyunidc',
         check_method: item.check_method || 'service_then_power',
         visible_on_status: boolValueWithDefault(item.visible_on_status, true),
@@ -482,9 +479,9 @@ export async function handleRequest(request, env) {
       server_id: id,
       old_state: 'configured',
       new_state: 'deleted',
-      label: '鍒犻櫎鐩戞帶椤?,
+      label: '删除监控项',
       level: 'warning',
-      message: `鐩戞帶椤?${serverDisplayName(existing)} 宸蹭粠绠＄悊鍚庡彴鍒犻櫎`,
+      message: `监控项 ${serverDisplayName(existing)} 已从管理后台删除`,
       created_at: now,
     });
     return json({ ok: true });
@@ -499,4 +496,3 @@ export async function handleRequest(request, env) {
 
   return json({ error: 'NOT_FOUND' }, 404);
 }
-

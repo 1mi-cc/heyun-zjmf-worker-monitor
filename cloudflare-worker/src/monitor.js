@@ -1,6 +1,3 @@
-Exit code: 0
-Wall time: 0.3 seconds
-Output:
 import { TRANSITION_LABELS } from './constants.js';
 import { Notifier } from './notifier.js';
 import { checkHttpHealth, checkTcpHealth } from './probe.js';
@@ -19,26 +16,26 @@ function eventLevel(newState) {
 }
 
 const STATE_TEXT = {
-  healthy: '姝ｅ父',
-  suspect: '鍙枒',
-  down: '瀹曟満',
-  rebooting: '澶勭悊涓?,
-  recovering: '鎭㈠涓?,
+  healthy: '正常',
+  suspect: '可疑',
+  down: '宕机',
+  rebooting: '处理中',
+  recovering: '恢复中',
 };
 
 const LEVEL_TEXT = {
-  info: '淇℃伅',
-  warning: '璀﹀憡',
-  critical: '涓ラ噸',
+  info: '信息',
+  warning: '警告',
+  critical: '严重',
 };
 
 const METHOD_TEXT = {
-  api_only: '榄旀柟璐㈠姟 API',
+  api_only: '魔方财务 API',
   http: 'HTTP(S)',
-  tcp: 'TCP 绔彛',
-  http_then_api: 'HTTP(S) + API 澶嶆牳',
-  tcp_then_api: 'TCP + API 澶嶆牳',
-  service_then_power: '涓夋妫€娴嬶細HTTP(S) + TCP + API',
+  tcp: 'TCP 端口',
+  http_then_api: 'HTTP(S) + API 复核',
+  tcp_then_api: 'TCP + API 复核',
+  service_then_power: '三步检测：HTTP(S) + TCP + API',
 };
 
 function formatNotifyTime(now, timezone = 'Asia/Shanghai') {
@@ -53,17 +50,17 @@ function rebootLimitWindow(settings = {}) {
 }
 
 function rebootWindowText(settings = {}) {
-  return rebootLimitWindow(settings) === 'day' ? '24 灏忔椂' : '姣忓皬鏃?;
+  return rebootLimitWindow(settings) === 'day' ? '24 小时' : '每小时';
 }
 
 function actionHint(label, nextRuntime, settings) {
-  if (label === '妫€娴嬪紓甯?) return `缁х画瑙傚療锛岃繛缁け璐?${settings.suspect_threshold} 娆″悗鎵嶄細鑷姩澶勭悊`;
-  if (label === '纭瀹曟満') return '宸茬‘璁ゅ紓甯革紝鍑嗗鎸夌數婧愮姸鎬佽嚜鍔ㄥ鐞?;
-  if (label === '瑙﹀彂寮€鏈?) return '姝ｅ湪鍙戦€佸紑鏈烘寚浠?;
-  if (label === '瑙﹀彂閲嶅惎') return '姝ｅ湪鍙戦€侀噸鍚寚浠?;
-  if (label === '鎭㈠鎴愬姛') return '鏈嶅姟宸叉仮澶嶆甯?;
-  if (label === '鎭㈠瓒呮椂') return '鎭㈠瓒呮椂锛岀瓑寰呬笅涓€杞鐞?;
-  return nextRuntime.state === 'healthy' ? '鏃犻渶澶勭悊' : '鎸佺画鐩戞帶涓?;
+  if (label === '检测异常') return `继续观察，连续失败 ${settings.suspect_threshold} 次后才会自动处理`;
+  if (label === '确认宕机') return '已确认异常，准备按电源状态自动处理';
+  if (label === '触发开机') return '正在发送开机指令';
+  if (label === '触发重启') return '正在发送重启指令';
+  if (label === '恢复成功') return '服务已恢复正常';
+  if (label === '恢复超时') return '恢复超时，等待下一轮处理';
+  return nextRuntime.state === 'healthy' ? '无需处理' : '持续监控中';
 }
 
 function isIpAddress(value) {
@@ -71,7 +68,7 @@ function isIpAddress(value) {
 }
 
 function displayServerName(server) {
-  return isIpAddress(server.name) || isIpAddress(server.ip) ? `鏈嶅姟鍣?#${server.id}` : server.name;
+  return isIpAddress(server.name) || isIpAddress(server.ip) ? `服务器 #${server.id}` : server.name;
 }
 
 function buildTransitionNotice(server, oldState, nextRuntime, now, label, level, settings) {
@@ -79,26 +76,26 @@ function buildTransitionNotice(server, oldState, nextRuntime, now, label, level,
   const method = METHOD_TEXT[server.check_method || 'api_only'] || server.check_method || 'api_only';
   const stateText = `${STATE_TEXT[oldState] || oldState} -> ${STATE_TEXT[nextRuntime.state] || nextRuntime.state}`;
   const limit = settings.default_daily_reboot_limit;
-  const rebootText = limit <= 0 ? `${nextRuntime.reboot_count_today || 0} / 涓嶉檺` : `${nextRuntime.reboot_count_today || 0} / ${limit}`;
+  const rebootText = limit <= 0 ? `${nextRuntime.reboot_count_today || 0} / 不限` : `${nextRuntime.reboot_count_today || 0} / ${limit}`;
   const windowText = rebootWindowText(settings);
   return {
-    title: `銆?{LEVEL_TEXT[level] || level}銆?{name} - ${label || STATE_TEXT[nextRuntime.state] || nextRuntime.state}`,
+    title: `【${LEVEL_TEXT[level] || level}】${name} - ${label || STATE_TEXT[nextRuntime.state] || nextRuntime.state}`,
     message: [
-      `浜嬩欢锛?{label || '鐘舵€佸彉鏇?}`,
-      `鐩戞帶椤癸細${name} (#${server.id})`,
-      `涓ラ噸绾у埆锛?{LEVEL_TEXT[level] || level}`,
-      `鐘舵€佸彉鍖栵細${stateText}`,
-      `妫€娴嬫柟寮忥細${method}`,
-      `鏈€杩戠粨鏋滐細${nextRuntime.last_status_value || '鏆傛棤'}`,
-      `杩炵画澶辫触锛?{nextRuntime.consecutive_failures || 0} / ${settings.suspect_threshold}`,
-      `閲嶅惎娆℃暟锛?{rebootText}锛?{windowText}锛塦,
-      `澶勭悊寤鸿锛?{actionHint(label, nextRuntime, settings)}`,
-      `鏃堕棿锛?{formatNotifyTime(now, settings.timezone || 'Asia/Shanghai')}`,
+      `事件：${label || '状态变更'}`,
+      `监控项：${name} (#${server.id})`,
+      `严重级别：${LEVEL_TEXT[level] || level}`,
+      `状态变化：${stateText}`,
+      `检测方式：${method}`,
+      `最近结果：${nextRuntime.last_status_value || '暂无'}`,
+      `连续失败：${nextRuntime.consecutive_failures || 0} / ${settings.suspect_threshold}`,
+      `重启次数：${rebootText}（${windowText}）`,
+      `处理建议：${actionHint(label, nextRuntime, settings)}`,
+      `时间：${formatNotifyTime(now, settings.timezone || 'Asia/Shanghai')}`,
     ].join('\n'),
   };
 }
 
-const ACTION_ONLY_NOTICE_LABELS = new Set(['瑙﹀彂寮€鏈?, '瑙﹀彂閲嶅惎', '鎭㈠鎴愬姛', '鎭㈠瓒呮椂']);
+const ACTION_ONLY_NOTICE_LABELS = new Set(['触发开机', '触发重启', '恢复成功', '恢复超时']);
 
 function shouldSendTransitionNotice(label, settings) {
   if (!settings.notify_failure_silence) return true;
@@ -127,7 +124,7 @@ async function checkApiHealth(client, server, runtime, now) {
   return {
     ok: health,
     statusValue,
-    error: health === null ? client.lastError || 'API 鐘舵€佽幏鍙栧け璐? : '',
+    error: health === null ? client.lastError || 'API 状态获取失败' : '',
     latencyMs: Date.now() - started,
   };
 }
@@ -152,7 +149,7 @@ function combinedProbe(results, overrides = {}) {
   return {
     ok: hasOkOverride ? overrides.ok : combinedHealth(results),
     statusValue: results.map((item) => item.statusValue).filter(Boolean).join(' -> '),
-    error: hasErrorOverride ? overrides.error : results.filter((item) => item.ok === false).map((item) => item.error).filter(Boolean).join('锛?),
+    error: hasErrorOverride ? overrides.error : results.filter((item) => item.ok === false).map((item) => item.error).filter(Boolean).join('；'),
     latencyMs: results.reduce((sum, item) => sum + Number(item.latencyMs || 0), 0),
     recoveryAction: overrides.recoveryAction,
   };
@@ -232,8 +229,8 @@ export async function runMonitorOnce({ repo, fetcher = (input, init) => globalTh
       const action = probe.recoveryAction === undefined ? 'reboot' : probe.recoveryAction;
       if (action !== 'none') {
         const rebooting = applyRebootStart(nextRuntime, now);
-        const startLabel = action === 'power_on' ? '瑙﹀彂寮€鏈? : '瑙﹀彂閲嶅惎';
-        const doneLabel = action === 'power_on' ? '寮€鏈烘寚浠ゅ凡鍙戦€? : '閲嶅惎鎸囦护宸插彂閫?;
+        const startLabel = action === 'power_on' ? '触发开机' : '触发重启';
+        const doneLabel = action === 'power_on' ? '开机指令已发送' : '重启指令已发送';
         await recordTransition(repo, notifier, server, nextRuntime.state, rebooting, now, { label: startLabel });
         const success = action === 'power_on' ? await client.powerOn(server.id, now) : await client.hardReboot(server.id, now);
         if (success) {
@@ -257,4 +254,3 @@ export async function runMonitorOnce({ repo, fetcher = (input, init) => globalTh
 
   return { checked };
 }
-
