@@ -68,7 +68,62 @@ function isIpAddress(value) {
 }
 
 function displayServerName(server) {
-  return isIpAddress(server.name) || isIpAddress(server.ip) ? `服务器 #${server.id}` : server.name;
+  return !server.name || isIpAddress(server.name) ? `服务器 #${server.id}` : server.name;
+}
+
+function reportState(state) {
+  if (state === 'healthy') return '正常';
+  if (state === 'suspect') return '可疑';
+  if (state === 'recovering') return '恢复中';
+  if (state === 'down') return '宕机';
+  if (state === 'rebooting') return '处理中';
+  return '未检测';
+}
+
+function reportValue(value, maxLength = 80) {
+  const text = String(value || '暂无').replace(/\s+/g, ' ').trim();
+  return text.length > maxLength ? `${text.slice(0, maxLength - 1)}…` : text;
+}
+
+function buildStatusReport(status, now, settings) {
+  const total = status.length;
+  const healthy = status.filter((server) => server.state === 'healthy').length;
+  const unknown = status.filter((server) => !server.state).length;
+  const abnormal = total - healthy - unknown;
+  const lines = [
+    `汇报时间：${formatNotifyTime(now, settings.timezone || 'Asia/Shanghai')}`,
+    `服务器：${total} 台；正常 ${healthy} 台；异常 ${abnormal} 台；未检测 ${unknown} 台`,
+    '',
+  ];
+  const maxLength = 3500;
+  for (let index = 0; index < status.length; index += 1) {
+    const server = status[index];
+    const name = displayServerName(server);
+    const latency = Number(server.last_latency_ms || 0) > 0 ? `；延迟 ${Math.round(Number(server.last_latency_ms))}ms` : '';
+    const line = `${index + 1}. ${name} (#${server.id})：${reportState(server.state)}；结果 ${reportValue(server.last_status_value)}${latency}`;
+    if ([...lines, line].join('\n').length > maxLength) {
+      lines.push(`其余 ${status.length - index} 台服务器已省略`);
+      break;
+    }
+    lines.push(line);
+  }
+  return {
+    title: `【服务器状态汇报】${healthy}/${total} 台正常`,
+    message: lines.join('\n'),
+  };
+}
+
+async function maybeSendStatusReport(repo, notifier, settings, now, force = false) {
+  if (!force && !settings.status_report_enabled) return { sent: false, reason: 'disabled' };
+  const interval = Math.max(300, Number(settings.status_report_interval || 3600));
+  const lastSentAt = Number(await repo.getSetting('last_status_report_at', '0')) || 0;
+  if (!force && lastSentAt && now - lastSentAt < interval) return { sent: false, reason: 'not_due' };
+
+  const status = await repo.listStatus();
+  const notice = buildStatusReport(status, now, settings);
+  const result = await notifier.send(notice.title, notice.message, 'info');
+  if (result.ok) await repo.setSetting('last_status_report_at', now);
+  return { sent: result.ok, ...result, servers: status.length };
 }
 
 function buildTransitionNotice(server, oldState, nextRuntime, now, label, level, settings) {
@@ -199,7 +254,7 @@ async function probeServer({ client, server, fetcher, tcpConnector, now }) {
   return { ...api, recoveryAction: apiRecoveryAction(api) };
 }
 
-export async function runMonitorOnce({ repo, fetcher = (input, init) => globalThis.fetch(input, init), tcpConnector, now, date = new Date(now * 1000), force = false }) {
+export async function runMonitorOnce({ repo, fetcher = (input, init) => globalThis.fetch(input, init), tcpConnector, now, date = new Date(now * 1000), force = false, forceReport = false }) {
   const settings = await repo.getSettings();
   const notifier = new Notifier(settings, fetcher);
   const limitWindow = rebootLimitWindow(settings);
@@ -252,5 +307,6 @@ export async function runMonitorOnce({ repo, fetcher = (input, init) => globalTh
     await repo.pruneCheckResults(settings.data_retention_days, now);
   }
 
-  return { checked };
+  const report = await maybeSendStatusReport(repo, notifier, settings, now, forceReport);
+  return { checked, report };
 }

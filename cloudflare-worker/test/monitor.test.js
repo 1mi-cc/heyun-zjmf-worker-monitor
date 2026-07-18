@@ -12,7 +12,18 @@ class FakeRepo {
   }
 
   async getSettings() { return this.data.settings; }
+  async getSetting(key, fallback = '') { return this.data.settingValues?.[key] ?? fallback; }
+  async setSetting(key, value) {
+    this.data.settingValues ||= {};
+    this.data.settingValues[key] = String(value);
+  }
   async listEnabledServers() { return this.data.servers; }
+  async listStatus() {
+    return this.data.servers.map((server) => ({
+      ...server,
+      ...(this.data.runtimes[server.id] || {}),
+    }));
+  }
   async getProvider(name) { return this.data.providers[name]; }
   async updateProvider(provider) { this.providers.push({ ...provider }); }
   async getRuntime(id) { return this.data.runtimes[id]; }
@@ -123,6 +134,109 @@ test('runMonitorOnce 发送不泄露目标地址的中文详细通知', async ()
   assert.match(hookBodies[0].message, /检测方式：三步检测：HTTP\(S\) \+ TCP \+ API/);
   assert.match(hookBodies[0].message, /最近结果：HTTP 503 -> TCP 996 closed -> off/);
   assert.doesNotMatch(hookBodies[0].message, /web\.example|tcp\.example/);
+});
+
+test('runMonitorOnce 到达间隔后主动汇报所有服务器状态且不泄露地址', async () => {
+  const now = 1778382000;
+  const repo = new FakeRepo({
+    settings: {
+      suspect_threshold: 3,
+      reboot_cooldown: 300,
+      recover_timeout: 300,
+      default_daily_reboot_limit: 3,
+      api_timeout: 60,
+      timezone: 'Asia/Shanghai',
+      check_interval: 300,
+      webhook_url: 'https://hook.example/send',
+      webhook_type: 'custom',
+      status_report_enabled: true,
+      status_report_interval: 3600,
+    },
+    settingValues: { last_status_report_at: '0' },
+    providers: {
+      heyun: { name: 'heyun', api_base_url: 'https://api.example/v1', jwt_token: 'jwt', jwt_expire_at: 9999999999 },
+    },
+    servers: [{
+      id: '4075',
+      name: '主服务器',
+      ip: '203.0.113.10',
+      provider: 'heyun',
+      check_method: 'api_only',
+      daily_reboot_limit: 3,
+    }],
+    runtimes: {
+      4075: {
+        state: 'healthy',
+        consecutive_failures: 0,
+        consecutive_successes: 2,
+        last_check_time: now - 300,
+        last_reboot_time: 0,
+        reboot_count_today: 0,
+        reboot_date: '',
+        last_status_value: 'on',
+        state_changed_at: now - 3600,
+        first_failure_at: 0,
+        reboot_initiated_at: 0,
+        scheduled_reboot_date: '',
+      },
+    },
+  });
+  const hookBodies = [];
+  const fetcher = async (url, init) => {
+    const value = String(url);
+    if (value === 'https://hook.example/send') {
+      hookBodies.push(JSON.parse(init.body));
+      return new Response('{}', { status: 200 });
+    }
+    if (value.includes('/module/status')) return new Response(JSON.stringify({ data: { status: 'on' } }));
+    return new Response(JSON.stringify({ jwt: 'jwt' }));
+  };
+
+  const summary = await runMonitorOnce({ repo, fetcher, now });
+
+  assert.equal(summary.report.sent, true);
+  assert.equal(hookBodies.length, 1);
+  assert.match(hookBodies[0].title, /服务器状态汇报/);
+  assert.match(hookBodies[0].message, /主服务器 \(#4075\)/);
+  assert.match(hookBodies[0].message, /正常/);
+  assert.doesNotMatch(JSON.stringify(hookBodies[0]), /203\.0\.113\.10|api\.example/);
+  assert.equal(repo.data.settingValues.last_status_report_at, String(now));
+});
+
+test('runMonitorOnce 未到汇报间隔时不重复发送', async () => {
+  const now = 1778382000;
+  const repo = new FakeRepo({
+    settings: {
+      suspect_threshold: 3,
+      reboot_cooldown: 300,
+      recover_timeout: 300,
+      default_daily_reboot_limit: 3,
+      api_timeout: 60,
+      timezone: 'Asia/Shanghai',
+      check_interval: 300,
+      webhook_url: 'https://hook.example/send',
+      webhook_type: 'custom',
+      status_report_enabled: true,
+      status_report_interval: 3600,
+    },
+    settingValues: { last_status_report_at: String(now - 300) },
+    providers: {
+      heyun: { name: 'heyun', api_base_url: 'https://api.example/v1', jwt_token: 'jwt', jwt_expire_at: 9999999999 },
+    },
+    servers: [{ id: '4075', name: '主服务器', provider: 'heyun', check_method: 'api_only', daily_reboot_limit: 3 }],
+    runtimes: { 4075: { state: 'healthy', last_check_time: now - 300, last_status_value: 'on' } },
+  });
+  let notifications = 0;
+  const fetcher = async (url) => {
+    if (String(url) === 'https://hook.example/send') notifications += 1;
+    if (String(url).includes('/module/status')) return new Response(JSON.stringify({ data: { status: 'on' } }));
+    return new Response('{}');
+  };
+
+  const summary = await runMonitorOnce({ repo, fetcher, now });
+
+  assert.equal(summary.report.sent, false);
+  assert.equal(notifications, 0);
 });
 
 test('runMonitorOnce 勾选失败阶段静默后不发送检测异常通知', async () => {
