@@ -4,6 +4,10 @@ import { Notifier } from './notifier.js';
 import { renderAdminPage } from './admin-page.js';
 import { renderStatusPage } from './status-page.js';
 import { ZjmfClient } from './zjmf-client.js';
+
+const SECRET_SETTING_KEYS = new Set(['pushplus_token', 'notify_token', 'notify_secret']);
+const SECRET_SETTING_MASKS = new Set(['已配置', '•••']);
+
 function json(data, status = 200) {
   return new Response(JSON.stringify(data), {
     status,
@@ -13,6 +17,10 @@ function json(data, status = 200) {
 
 function boolValue(value) {
   return ['1', 'true', 'on', 'yes'].includes(String(value ?? '').trim().toLowerCase());
+}
+
+function isMaskedSecretSetting(key, value) {
+  return SECRET_SETTING_KEYS.has(key) && SECRET_SETTING_MASKS.has(String(value));
 }
 
 function boolValueWithDefault(value, fallback = true) {
@@ -490,7 +498,10 @@ export async function handleRequest(request, env) {
   if (url.pathname === '/api/admin/settings' && request.method === 'POST') {
     const body = await readJson(request);
     if (!body || typeof body !== 'object') return json({ error: 'INVALID_SETTINGS' }, 400);
-    for (const [key, value] of Object.entries(body)) await repo.setSetting(key, value);
+    for (const [key, value] of Object.entries(body)) {
+      if (isMaskedSecretSetting(key, value)) continue;
+      await repo.setSetting(key, value);
+    }
     return json({ ok: true });
   }
 

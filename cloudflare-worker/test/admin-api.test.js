@@ -426,6 +426,30 @@ test('管理概览返回配置并仅隐藏 pushplus token 和服务器 IP', asyn
   assert.doesNotMatch(text, /pushplus-secret|203\.0\.113\.10/);
 });
 
+test('settings update preserves configured notification secrets when the admin form submits masks', async () => {
+  const testEnv = env({
+    settings: {
+      notify_token: 'real-bot-token',
+      notify_secret: 'real-signing-secret',
+    },
+  });
+
+  const res = await handleRequest(new Request('https://worker.example/api/admin/settings', {
+    method: 'POST',
+    headers: { authorization: 'Bearer admin-password', 'content-type': 'application/json; charset=utf-8' },
+    body: JSON.stringify({
+      notify_token: '已配置',
+      notify_secret: '•••',
+      notify_target: 'new-chat-id',
+    }),
+  }), testEnv);
+
+  assert.equal(res.status, 200);
+  assert.equal(testEnv.DB.data.settings.notify_token, 'real-bot-token');
+  assert.equal(testEnv.DB.data.settings.notify_secret, 'real-signing-secret');
+  assert.equal(testEnv.DB.data.settings.notify_target, 'new-chat-id');
+});
+
 test('管理概览返回数据保留和后台分析默认范围配置', async () => {
   const res = await handleRequest(
     new Request('https://worker.example/api/admin/overview', {
