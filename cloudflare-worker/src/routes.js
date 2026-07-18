@@ -5,7 +5,7 @@ import { renderAdminPage } from './admin-page.js';
 import { renderStatusPage } from './status-page.js';
 import { ZjmfClient } from './zjmf-client.js';
 
-const SECRET_SETTING_KEYS = new Set(['pushplus_token', 'notify_token', 'notify_secret']);
+const SECRET_SETTING_KEYS = new Set(['pushplus_token', 'notify_token', 'notify_secret', 'telegram_webhook_secret']);
 const SECRET_SETTING_MASKS = new Set(['已配置', '•••']);
 
 function json(data, status = 200) {
@@ -58,6 +58,34 @@ async function readJson(request) {
   } catch {
     return null;
   }
+}
+
+function randomBase64Url(byteLength = 32) {
+  const bytes = crypto.getRandomValues(new Uint8Array(byteLength));
+  const binary = String.fromCharCode(...bytes);
+  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
+}
+
+async function callTelegram(fetcher, token, method, payload) {
+  try {
+    const response = await fetcher(`https://api.telegram.org/bot${token}/${method}`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json; charset=utf-8' },
+      body: JSON.stringify(payload),
+    });
+    let data = null;
+    try {
+      data = await response.json();
+    } catch {}
+    return { ok: response.ok && data?.ok === true, status: response.status };
+  } catch {
+    return { ok: false, status: 0 };
+  }
+}
+
+function telegramCommand(text) {
+  const command = String(text || '').trim().split(/\s+/, 1)[0].toLowerCase();
+  return /^\/(?:start|help)(?:@[a-z0-9_]+)?$/.test(command);
 }
 
 function isIpAddress(value) {
@@ -239,15 +267,41 @@ export async function handleRequest(request, env) {
     return json({ servers: await publicStatus(repo) });
   }
 
+  if (url.pathname === '/api/telegram/webhook' && request.method === 'POST') {
+    const expectedSecret = await repo.getSetting('telegram_webhook_secret', '');
+    const providedSecret = request.headers.get('x-telegram-bot-api-secret-token') || '';
+    if (!expectedSecret || providedSecret !== expectedSecret) return json({ error: 'FORBIDDEN' }, 403);
+
+    const update = await readJson(request);
+    const chatId = update?.message?.chat?.id;
+    if (!telegramCommand(update?.message?.text)) return json({ ok: true, handled: false });
+    if (!/^-?\d+$/.test(String(chatId ?? ''))) return json({ error: 'INVALID_UPDATE' }, 400);
+
+    const token = await repo.getSetting('notify_token', '');
+    if (!token) return json({ error: 'TELEGRAM_NOT_CONFIGURED' }, 503);
+    const result = await callTelegram(
+      env.fetcher || ((input, init) => fetch(input, init)),
+      token,
+      'sendMessage',
+      {
+        chat_id: String(chatId),
+        text: '\u5df2\u8fde\u63a5\u3002\u76d1\u63a7\u673a\u5668\u4eba\u5df2\u6b63\u5e38\u5de5\u4f5c\u3002',
+      },
+    );
+    if (!result.ok) return json({ error: 'TELEGRAM_REPLY_FAILED', status: result.status }, 502);
+    return json({ ok: true, handled: true });
+  }
+
   if (!url.pathname.startsWith('/api/admin/')) return json({ error: 'NOT_FOUND' }, 404);
   if (!(await isAuthorized(request, env, repo))) return json({ error: 'UNAUTHORIZED' }, 401);
 
   if (url.pathname === '/api/admin/overview' && request.method === 'GET') {
     const settings = await repo.getSettings();
+    const { telegram_webhook_secret: _telegramWebhookSecret, ...visibleSettings } = settings;
     const status = (await repo.listStatus()).map(publicServer);
     return json({
       settings: {
-        ...settings,
+        ...visibleSettings,
         pushplus_token: settings.pushplus_token ? '已配置' : '',
         notify_token: settings.notify_token || settings.pushplus_token ? '已配置' : '',
         notify_secret: settings.notify_secret ? '已配置' : '',
@@ -503,6 +557,30 @@ export async function handleRequest(request, env) {
       await repo.setSetting(key, value);
     }
     return json({ ok: true });
+  }
+
+  if (url.pathname === '/api/admin/telegram/webhook/setup' && request.method === 'POST') {
+    const token = await repo.getSetting('notify_token', '');
+    if (!token) return json({ error: 'TELEGRAM_NOT_CONFIGURED' }, 400);
+
+    const previousSecret = await repo.getSetting('telegram_webhook_secret', '');
+    const secret = randomBase64Url();
+    await repo.setSetting('telegram_webhook_secret', secret);
+    const result = await callTelegram(
+      env.fetcher || ((input, init) => fetch(input, init)),
+      token,
+      'setWebhook',
+      {
+        url: `${url.origin}/api/telegram/webhook`,
+        secret_token: secret,
+        allowed_updates: ['message'],
+      },
+    );
+    if (!result.ok) {
+      await repo.setSetting('telegram_webhook_secret', previousSecret);
+      return json({ error: 'TELEGRAM_WEBHOOK_SETUP_FAILED', status: result.status }, 502);
+    }
+    return json({ ok: true, status: result.status });
   }
 
   return json({ error: 'NOT_FOUND' }, 404);

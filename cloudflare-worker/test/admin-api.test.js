@@ -412,7 +412,7 @@ test('管理概览返回配置并仅隐藏 pushplus token 和服务器 IP', asyn
     new Request('https://worker.example/api/admin/overview', {
       headers: { authorization: 'Bearer admin-password' },
     }),
-    env(),
+    env({ settings: { telegram_webhook_secret: 'private-webhook-secret' } }),
   );
   const text = await res.text();
   const data = JSON.parse(text);
@@ -423,7 +423,8 @@ test('管理概览返回配置并仅隐藏 pushplus token 和服务器 IP', asyn
   assert.equal(data.settings.notify_secret, '');
   assert.equal(data.settings.webhook_name, 'pushplus');
   assert.equal(data.providers[0].api_password, 'provider-secret');
-  assert.doesNotMatch(text, /pushplus-secret|203\.0\.113\.10/);
+  assert.equal(Object.hasOwn(data.settings, 'telegram_webhook_secret'), false);
+  assert.doesNotMatch(text, /pushplus-secret|private-webhook-secret|203\.0\.113\.10/);
 });
 
 test('settings update preserves configured notification secrets when the admin form submits masks', async () => {
@@ -448,6 +449,112 @@ test('settings update preserves configured notification secrets when the admin f
   assert.equal(testEnv.DB.data.settings.notify_token, 'real-bot-token');
   assert.equal(testEnv.DB.data.settings.notify_secret, 'real-signing-secret');
   assert.equal(testEnv.DB.data.settings.notify_target, 'new-chat-id');
+});
+
+test('admin can register the Telegram webhook without exposing the bot token', async () => {
+  const calls = [];
+  const testEnv = env({
+    settings: { webhook_type: 'telegram', notify_token: 'bot-token' },
+    fetcher: async (input, init) => {
+      calls.push({ input: String(input), init });
+      return new Response(JSON.stringify({ ok: true, result: true }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      });
+    },
+  });
+
+  const res = await handleRequest(new Request('https://worker.example/api/admin/telegram/webhook/setup', {
+    method: 'POST',
+    headers: { authorization: 'Bearer admin-password' },
+  }), testEnv);
+  const data = await res.json();
+  const payload = JSON.parse(calls[0].init.body);
+
+  assert.equal(res.status, 200);
+  assert.deepEqual(data, { ok: true, status: 200 });
+  assert.equal(calls[0].input, 'https://api.telegram.org/botbot-token/setWebhook');
+  assert.equal(payload.url, 'https://worker.example/api/telegram/webhook');
+  assert.deepEqual(payload.allowed_updates, ['message']);
+  assert.match(payload.secret_token, /^[A-Za-z0-9_-]{32,256}$/);
+  assert.equal(testEnv.DB.data.settings.telegram_webhook_secret, payload.secret_token);
+});
+
+test('Telegram webhook setup restores the previous secret after a network failure', async () => {
+  const testEnv = env({
+    settings: {
+      notify_token: 'bot-token',
+      telegram_webhook_secret: 'previous-secret',
+    },
+    fetcher: async () => {
+      throw new Error('network unavailable');
+    },
+  });
+
+  const res = await handleRequest(new Request('https://worker.example/api/admin/telegram/webhook/setup', {
+    method: 'POST',
+    headers: { authorization: 'Bearer admin-password' },
+  }), testEnv);
+
+  assert.equal(res.status, 502);
+  assert.deepEqual(await res.json(), { error: 'TELEGRAM_WEBHOOK_SETUP_FAILED', status: 0 });
+  assert.equal(testEnv.DB.data.settings.telegram_webhook_secret, 'previous-secret');
+});
+
+test('Telegram webhook replies to an authenticated start command', async () => {
+  const calls = [];
+  const testEnv = env({
+    settings: {
+      webhook_type: 'telegram',
+      notify_token: 'bot-token',
+      telegram_webhook_secret: 'webhook-secret',
+    },
+    fetcher: async (input, init) => {
+      calls.push({ input: String(input), init });
+      return new Response(JSON.stringify({ ok: true, result: { message_id: 1 } }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      });
+    },
+  });
+
+  const res = await handleRequest(new Request('https://worker.example/api/telegram/webhook', {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json; charset=utf-8',
+      'x-telegram-bot-api-secret-token': 'webhook-secret',
+    },
+    body: JSON.stringify({ message: { text: '/start', chat: { id: 123456 } } }),
+  }), testEnv);
+  const data = await res.json();
+  const payload = JSON.parse(calls[0].init.body);
+
+  assert.equal(res.status, 200);
+  assert.deepEqual(data, { ok: true, handled: true });
+  assert.equal(calls[0].input, 'https://api.telegram.org/botbot-token/sendMessage');
+  assert.equal(payload.chat_id, '123456');
+  assert.match(payload.text, /已连接/);
+});
+
+test('Telegram webhook rejects requests with the wrong secret', async () => {
+  const testEnv = env({
+    settings: {
+      notify_token: 'bot-token',
+      telegram_webhook_secret: 'webhook-secret',
+    },
+  });
+
+  const res = await handleRequest(new Request('https://worker.example/api/telegram/webhook', {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json; charset=utf-8',
+      'x-telegram-bot-api-secret-token': 'wrong-secret',
+    },
+    body: JSON.stringify({ message: { text: '/start', chat: { id: 123456 } } }),
+  }), testEnv);
+
+  assert.equal(res.status, 403);
+  assert.deepEqual(await res.json(), { error: 'FORBIDDEN' });
 });
 
 test('管理概览返回数据保留和后台分析默认范围配置', async () => {
