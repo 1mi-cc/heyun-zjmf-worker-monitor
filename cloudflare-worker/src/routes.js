@@ -1,11 +1,11 @@
-import { runMonitorOnce, sendStatusReport } from './monitor.js';
+import { runMonitorOnce } from './monitor.js';
 import { D1Repository } from './repository.js';
 import { Notifier } from './notifier.js';
 import { renderAdminPage } from './admin-page.js';
 import { renderStatusPage } from './status-page.js';
 import { ZjmfClient } from './zjmf-client.js';
 
-const SECRET_SETTING_KEYS = new Set(['pushplus_token', 'notify_token', 'notify_secret', 'telegram_webhook_secret']);
+const SECRET_SETTING_KEYS = new Set(['pushplus_token', 'notify_token', 'notify_secret']);
 const SECRET_SETTING_MASKS = new Set(['已配置', '•••']);
 
 function json(data, status = 200) {
@@ -57,23 +57,6 @@ async function readJson(request) {
     return await request.json();
   } catch {
     return null;
-  }
-}
-
-async function callTelegram(fetcher, token, method, payload) {
-  try {
-    const response = await fetcher(`https://api.telegram.org/bot${token}/${method}`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json; charset=utf-8' },
-      body: JSON.stringify(payload),
-    });
-    let data = null;
-    try {
-      data = await response.json();
-    } catch {}
-    return { ok: response.ok && data?.ok === true, status: response.status };
-  } catch {
-    return { ok: false, status: 0 };
   }
 }
 
@@ -261,11 +244,10 @@ export async function handleRequest(request, env) {
 
   if (url.pathname === '/api/admin/overview' && request.method === 'GET') {
     const settings = await repo.getSettings();
-    const { telegram_webhook_secret: _telegramWebhookSecret, ...visibleSettings } = settings;
     const status = (await repo.listStatus()).map(publicServer);
     return json({
       settings: {
-        ...visibleSettings,
+        ...settings,
         pushplus_token: settings.pushplus_token ? '已配置' : '',
         notify_token: settings.notify_token || settings.pushplus_token ? '已配置' : '',
         notify_secret: settings.notify_secret ? '已配置' : '',
@@ -319,16 +301,6 @@ export async function handleRequest(request, env) {
   if (url.pathname === '/api/admin/notify/test' && request.method === 'POST') {
     const notifier = new Notifier(await repo.getSettings(), (input, init) => fetch(input, init));
     const result = await notifier.send('ZJMF 测试通知', '这是一条来自管理后台的测试通知。', 'info');
-    return json(result, result.ok ? 200 : 502);
-  }
-
-  if (url.pathname === '/api/admin/report/send' && request.method === 'POST') {
-    const result = await sendStatusReport({
-      repo,
-      fetcher: env.fetcher || ((input, init) => fetch(input, init)),
-      now: Math.floor(Date.now() / 1000),
-      force: true,
-    });
     return json(result, result.ok ? 200 : 502);
   }
 
@@ -531,21 +503,6 @@ export async function handleRequest(request, env) {
       await repo.setSetting(key, value);
     }
     return json({ ok: true });
-  }
-
-  if (url.pathname === '/api/admin/telegram/webhook/remove' && request.method === 'POST') {
-    const token = await repo.getSetting('notify_token', '');
-    if (!token) return json({ error: 'TELEGRAM_NOT_CONFIGURED' }, 400);
-
-    const result = await callTelegram(
-      env.fetcher || ((input, init) => fetch(input, init)),
-      token,
-      'deleteWebhook',
-      { drop_pending_updates: true },
-    );
-    if (!result.ok) return json({ error: 'TELEGRAM_WEBHOOK_REMOVE_FAILED', status: result.status }, 502);
-    await repo.setSetting('telegram_webhook_secret', '');
-    return json({ ok: true, status: result.status });
   }
 
   return json({ error: 'NOT_FOUND' }, 404);

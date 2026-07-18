@@ -60,8 +60,6 @@ export class D1Repository {
       webhook_headers: raw.webhook_headers || DEFAULT_SETTINGS.webhook_headers,
       webhook_template: raw.webhook_template || DEFAULT_SETTINGS.webhook_template,
       notify_failure_silence: boolSetting(raw.notify_failure_silence, DEFAULT_SETTINGS.notify_failure_silence),
-      status_report_enabled: boolSetting(raw.status_report_enabled, DEFAULT_SETTINGS.status_report_enabled),
-      status_report_interval: numberSetting(raw.status_report_interval, DEFAULT_SETTINGS.status_report_interval),
       pushplus_token: raw.pushplus_token || '',
       notify_token: raw.notify_token || raw.pushplus_token || DEFAULT_SETTINGS.notify_token,
       notify_target: raw.notify_target || DEFAULT_SETTINGS.notify_target,

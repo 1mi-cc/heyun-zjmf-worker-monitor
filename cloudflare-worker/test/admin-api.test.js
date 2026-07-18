@@ -412,7 +412,7 @@ test('管理概览返回配置并仅隐藏 pushplus token 和服务器 IP', asyn
     new Request('https://worker.example/api/admin/overview', {
       headers: { authorization: 'Bearer admin-password' },
     }),
-    env({ settings: { telegram_webhook_secret: 'private-webhook-secret' } }),
+    env(),
   );
   const text = await res.text();
   const data = JSON.parse(text);
@@ -423,8 +423,7 @@ test('管理概览返回配置并仅隐藏 pushplus token 和服务器 IP', asyn
   assert.equal(data.settings.notify_secret, '');
   assert.equal(data.settings.webhook_name, 'pushplus');
   assert.equal(data.providers[0].api_password, 'provider-secret');
-  assert.equal(Object.hasOwn(data.settings, 'telegram_webhook_secret'), false);
-  assert.doesNotMatch(text, /pushplus-secret|private-webhook-secret|203\.0\.113\.10/);
+  assert.doesNotMatch(text, /pushplus-secret|203\.0\.113\.10/);
 });
 
 test('settings update preserves configured notification secrets when the admin form submits masks', async () => {
@@ -449,87 +448,6 @@ test('settings update preserves configured notification secrets when the admin f
   assert.equal(testEnv.DB.data.settings.notify_token, 'real-bot-token');
   assert.equal(testEnv.DB.data.settings.notify_secret, 'real-signing-secret');
   assert.equal(testEnv.DB.data.settings.notify_target, 'new-chat-id');
-});
-
-test('Telegram 命令 webhook 已移除', async () => {
-  const res = await handleRequest(new Request('https://worker.example/api/telegram/webhook', {
-    method: 'POST',
-  }), env());
-
-  assert.equal(res.status, 404);
-});
-
-test('管理员可以清理 Telegram webhook 且不暴露 Token', async () => {
-  const calls = [];
-  const testEnv = env({
-    settings: { notify_token: 'bot-token', telegram_webhook_secret: 'old-secret' },
-    fetcher: async (input, init) => {
-      calls.push({ input: String(input), init });
-      return new Response(JSON.stringify({ ok: true, result: true }), {
-        status: 200,
-        headers: { 'content-type': 'application/json' },
-      });
-    },
-  });
-
-  const res = await handleRequest(new Request('https://worker.example/api/admin/telegram/webhook/remove', {
-    method: 'POST',
-    headers: { authorization: 'Bearer admin-password' },
-  }), testEnv);
-  const text = await res.text();
-  const payload = JSON.parse(calls[0].init.body);
-
-  assert.equal(res.status, 200);
-  assert.deepEqual(JSON.parse(text), { ok: true, status: 200 });
-  assert.equal(calls[0].input, 'https://api.telegram.org/botbot-token/deleteWebhook');
-  assert.deepEqual(payload, { drop_pending_updates: true });
-  assert.equal(testEnv.DB.data.settings.telegram_webhook_secret, '');
-  assert.doesNotMatch(text, /bot-token|old-secret/);
-});
-
-test('管理后台可以立即主动发送服务器状态汇报且不暴露 Telegram Token', async () => {
-  const calls = [];
-  const testEnv = env({
-    settings: {
-      webhook_type: 'telegram',
-      notify_token: 'bot-token',
-      notify_target: '123456',
-      status_report_enabled: 'true',
-      status_report_interval: '3600',
-    },
-    status: [{
-      id: '8564',
-      name: '主服务器',
-      ip: '203.0.113.10',
-      state: 'healthy',
-      last_status_value: 'on',
-      last_latency_ms: 88,
-    }],
-    fetcher: async (input, init) => {
-      calls.push({ input: String(input), init });
-      return new Response(JSON.stringify({ ok: true, result: { message_id: 1 } }), {
-        status: 200,
-        headers: { 'content-type': 'application/json' },
-      });
-    },
-  });
-
-  const res = await handleRequest(new Request('https://worker.example/api/admin/report/send', {
-    method: 'POST',
-    headers: { authorization: 'Bearer admin-password' },
-  }), testEnv);
-  const text = await res.text();
-  const data = JSON.parse(text);
-  const payload = JSON.parse(calls[0].init.body);
-
-  assert.equal(res.status, 200);
-  assert.equal(data.sent, true);
-  assert.equal(data.servers, 1);
-  assert.equal(calls[0].input, 'https://api.telegram.org/botbot-token/sendMessage');
-  assert.equal(payload.chat_id, '123456');
-  assert.match(payload.text, /服务器状态汇报/);
-  assert.match(payload.text, /主服务器 \(#8564\).*正常/);
-  assert.doesNotMatch(text, /bot-token/);
 });
 
 test('管理概览返回数据保留和后台分析默认范围配置', async () => {

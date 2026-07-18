@@ -29,8 +29,6 @@ export const DEFAULT_SETTINGS = Object.freeze({
   webhook_headers: '{\n  "Content-Type": "application/json"\n}',
   webhook_template: '{{message}}',
   notify_failure_silence: false,
-  status_report_enabled: false,
-  status_report_interval: 3600,
   notify_token: '',
   notify_target: '',
   notify_secret: '',
