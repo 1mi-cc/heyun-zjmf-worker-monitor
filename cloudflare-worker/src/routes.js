@@ -1,4 +1,4 @@
-import { runMonitorOnce } from './monitor.js';
+import { runMonitorOnce, sendStatusReport } from './monitor.js';
 import { D1Repository } from './repository.js';
 import { Notifier } from './notifier.js';
 import { renderAdminPage } from './admin-page.js';
@@ -60,12 +60,6 @@ async function readJson(request) {
   }
 }
 
-function randomBase64Url(byteLength = 32) {
-  const bytes = crypto.getRandomValues(new Uint8Array(byteLength));
-  const binary = String.fromCharCode(...bytes);
-  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
-}
-
 async function callTelegram(fetcher, token, method, payload) {
   try {
     const response = await fetcher(`https://api.telegram.org/bot${token}/${method}`, {
@@ -81,11 +75,6 @@ async function callTelegram(fetcher, token, method, payload) {
   } catch {
     return { ok: false, status: 0 };
   }
-}
-
-function telegramCommand(text) {
-  const command = String(text || '').trim().split(/\s+/, 1)[0].toLowerCase();
-  return /^\/(?:start|help)(?:@[a-z0-9_]+)?$/.test(command);
 }
 
 function isIpAddress(value) {
@@ -267,31 +256,6 @@ export async function handleRequest(request, env) {
     return json({ servers: await publicStatus(repo) });
   }
 
-  if (url.pathname === '/api/telegram/webhook' && request.method === 'POST') {
-    const expectedSecret = await repo.getSetting('telegram_webhook_secret', '');
-    const providedSecret = request.headers.get('x-telegram-bot-api-secret-token') || '';
-    if (!expectedSecret || providedSecret !== expectedSecret) return json({ error: 'FORBIDDEN' }, 403);
-
-    const update = await readJson(request);
-    const chatId = update?.message?.chat?.id;
-    if (!telegramCommand(update?.message?.text)) return json({ ok: true, handled: false });
-    if (!/^-?\d+$/.test(String(chatId ?? ''))) return json({ error: 'INVALID_UPDATE' }, 400);
-
-    const token = await repo.getSetting('notify_token', '');
-    if (!token) return json({ error: 'TELEGRAM_NOT_CONFIGURED' }, 503);
-    const result = await callTelegram(
-      env.fetcher || ((input, init) => fetch(input, init)),
-      token,
-      'sendMessage',
-      {
-        chat_id: String(chatId),
-        text: '\u5df2\u8fde\u63a5\u3002\u76d1\u63a7\u673a\u5668\u4eba\u5df2\u6b63\u5e38\u5de5\u4f5c\u3002',
-      },
-    );
-    if (!result.ok) return json({ error: 'TELEGRAM_REPLY_FAILED', status: result.status }, 502);
-    return json({ ok: true, handled: true });
-  }
-
   if (!url.pathname.startsWith('/api/admin/')) return json({ error: 'NOT_FOUND' }, 404);
   if (!(await isAuthorized(request, env, repo))) return json({ error: 'UNAUTHORIZED' }, 401);
 
@@ -355,6 +319,16 @@ export async function handleRequest(request, env) {
   if (url.pathname === '/api/admin/notify/test' && request.method === 'POST') {
     const notifier = new Notifier(await repo.getSettings(), (input, init) => fetch(input, init));
     const result = await notifier.send('ZJMF 测试通知', '这是一条来自管理后台的测试通知。', 'info');
+    return json(result, result.ok ? 200 : 502);
+  }
+
+  if (url.pathname === '/api/admin/report/send' && request.method === 'POST') {
+    const result = await sendStatusReport({
+      repo,
+      fetcher: env.fetcher || ((input, init) => fetch(input, init)),
+      now: Math.floor(Date.now() / 1000),
+      force: true,
+    });
     return json(result, result.ok ? 200 : 502);
   }
 
@@ -559,27 +533,18 @@ export async function handleRequest(request, env) {
     return json({ ok: true });
   }
 
-  if (url.pathname === '/api/admin/telegram/webhook/setup' && request.method === 'POST') {
+  if (url.pathname === '/api/admin/telegram/webhook/remove' && request.method === 'POST') {
     const token = await repo.getSetting('notify_token', '');
     if (!token) return json({ error: 'TELEGRAM_NOT_CONFIGURED' }, 400);
 
-    const previousSecret = await repo.getSetting('telegram_webhook_secret', '');
-    const secret = randomBase64Url();
-    await repo.setSetting('telegram_webhook_secret', secret);
     const result = await callTelegram(
       env.fetcher || ((input, init) => fetch(input, init)),
       token,
-      'setWebhook',
-      {
-        url: `${url.origin}/api/telegram/webhook`,
-        secret_token: secret,
-        allowed_updates: ['message'],
-      },
+      'deleteWebhook',
+      { drop_pending_updates: true },
     );
-    if (!result.ok) {
-      await repo.setSetting('telegram_webhook_secret', previousSecret);
-      return json({ error: 'TELEGRAM_WEBHOOK_SETUP_FAILED', status: result.status }, 502);
-    }
+    if (!result.ok) return json({ error: 'TELEGRAM_WEBHOOK_REMOVE_FAILED', status: result.status }, 502);
+    await repo.setSetting('telegram_webhook_secret', '');
     return json({ ok: true, status: result.status });
   }
 

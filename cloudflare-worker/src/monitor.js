@@ -126,6 +126,12 @@ async function maybeSendStatusReport(repo, notifier, settings, now, force = fals
   return { sent: result.ok, ...result, servers: status.length };
 }
 
+export async function sendStatusReport({ repo, fetcher = (input, init) => globalThis.fetch(input, init), now = Math.floor(Date.now() / 1000), force = true }) {
+  const settings = await repo.getSettings();
+  const notifier = new Notifier(settings, fetcher);
+  return await maybeSendStatusReport(repo, notifier, settings, now, force);
+}
+
 function buildTransitionNotice(server, oldState, nextRuntime, now, label, level, settings) {
   const name = displayServerName(server);
   const method = METHOD_TEXT[server.check_method || 'api_only'] || server.check_method || 'api_only';
