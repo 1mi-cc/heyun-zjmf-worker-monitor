@@ -396,6 +396,42 @@ test('runMonitorOnce API 请求失败时返回三态 null 且不推进异常计�
   assert.equal(repo.events.length, 0);
 });
 
+test('runMonitorOnce 三步检测在服务不可达且 API 超时时发送原生异常通知', async () => {
+  const repo = new FakeRepo({
+    settings: {
+      suspect_threshold: 3,
+      reboot_cooldown: 300,
+      recover_timeout: 300,
+      default_daily_reboot_limit: 3,
+      api_timeout: 60,
+      timezone: 'Asia/Shanghai',
+      check_interval: 300,
+      webhook_url: 'https://hook.example/send',
+      webhook_type: 'custom',
+    },
+    providers: { heyun: { name: 'heyun', api_base_url: 'https://api.example/v1', jwt_token: 'jwt', jwt_expire_at: 9999999999 } },
+    servers: [{ id: '4075', name: '三步检测', provider: 'heyun', check_method: 'service_then_power', http_url: 'https://web.example/health', tcp_host: 'tcp.example', tcp_port: 996, daily_reboot_limit: 3 }],
+    runtimes: { 4075: null },
+  });
+  const hookBodies = [];
+  const fetcher = async (url, init) => {
+    if (String(url) === 'https://hook.example/send') {
+      hookBodies.push(JSON.parse(init.body));
+      return new Response('{}', { status: 200 });
+    }
+    if (String(url).includes('web.example')) throw new Error('network down');
+    if (String(url).includes('/module/status')) throw new Error('api timeout');
+    return new Response(JSON.stringify({ jwt: 'jwt' }));
+  };
+
+  await runMonitorOnce({ repo, fetcher, tcpConnector: async () => false, now: 1778382000 });
+
+  assert.equal(repo.data.runtimes['4075'].state, 'suspect');
+  assert.equal(hookBodies.length, 1);
+  assert.equal(hookBodies[0].title, '【信息】三步检测 - 检测异常');
+  assert.match(hookBodies[0].message, /最近结果：HTTP ERROR -> TCP 996 closed -> ERROR:/);
+});
+
 test('runMonitorOnce 默认按每小时统计重启次数', async () => {
   const repo = new FakeRepo({
     settings: { suspect_threshold: 3, reboot_cooldown: 300, recover_timeout: 300, default_daily_reboot_limit: 3, reboot_limit_window: 'hour', api_timeout: 60, timezone: 'Asia/Shanghai', check_interval: 300 },
