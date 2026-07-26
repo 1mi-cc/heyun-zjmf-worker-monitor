@@ -158,7 +158,8 @@ export class D1Repository {
       SELECT COUNT(*) AS count
       FROM events
       WHERE server_id = ?1
-        AND new_state = 'rebooting'
+        AND old_state = 'rebooting'
+        AND new_state = 'recovering'
         AND created_at >= ?2
     `).bind(serverId, since).first();
     return Number(row?.count || 0);

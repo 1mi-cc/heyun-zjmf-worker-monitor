@@ -1,7 +1,7 @@
 import { TRANSITION_LABELS } from './constants.js';
 import { Notifier } from './notifier.js';
 import { checkHttpHealth, checkTcpHealth } from './probe.js';
-import { createRuntime, advanceState, shouldReboot, applyRebootStart } from './state-machine.js';
+import { createRuntime, advanceState, shouldReboot, applyRebootStart, applyRebootSuccess } from './state-machine.js';
 import { localDateParts } from './time.js';
 import { ZjmfClient } from './zjmf-client.js';
 
@@ -120,14 +120,11 @@ async function checkApiHealth(client, server, runtime, now) {
   const status = await client.getStatus(server.id, now);
   const statusValue = status == null ? `ERROR: ${client.lastError || 'N/A'}` : String(status);
   const normalizedStatus = String(status ?? '').trim().toLowerCase();
-  const health = normalizedStatus === 'on' ? true : normalizedStatus === 'off' ? false : null;
-  const statusError = status == null || !normalizedStatus
-    ? client.lastError || 'API 状态获取失败'
-    : `Unexpected API status: ${normalizedStatus}`;
+  const health = status == null || !normalizedStatus ? null : normalizedStatus === 'on';
   return {
     ok: health,
     statusValue,
-    error: health === null ? statusError : '',
+    error: health === null ? client.lastError || 'API 状态获取失败' : '',
     latencyMs: Date.now() - started,
   };
 }
@@ -139,10 +136,11 @@ function combinedHealth(results) {
 }
 
 function apiRecoveryAction(api) {
+  if (api.ok === null) return 'none';
   const status = String(api.statusValue || '').trim().toLowerCase();
-  if (api.ok === false && status === 'off') return 'power_on';
-  if (api.ok === true && status === 'on') return '';
-  return 'none';
+  if (status === 'off') return 'power_on';
+  if (status === 'on') return '';
+  return 'reboot';
 }
 
 function combinedProbe(results, overrides = {}) {
@@ -162,25 +160,6 @@ function rebootWindowKey(date, timezone, window = 'hour') {
   if (window === 'day') return parts.dateKey;
   const hour = Number.isFinite(parts.hour) ? String(parts.hour).padStart(2, '0') : '00';
   return `${parts.dateKey}-${hour}`;
-}
-
-function recoveryAttemptCount(runtime, rebootWindow, recentRebootCount) {
-  if (Number.isFinite(recentRebootCount)) return recentRebootCount;
-  return runtime.reboot_date === rebootWindow ? Number(runtime.reboot_count_today || 0) : 0;
-}
-
-function applyRecoveryAttemptStart(runtime, now, rebootWindow, recentRebootCount) {
-  return {
-    ...applyRebootStart(runtime, now),
-    last_reboot_time: now,
-    reboot_initiated_at: now,
-    reboot_count_today: recoveryAttemptCount(runtime, rebootWindow, recentRebootCount) + 1,
-    reboot_date: rebootWindow,
-  };
-}
-
-function applyRecoveryAttemptSuccess(runtime, now) {
-  return { ...runtime, state: 'recovering', state_changed_at: now };
 }
 
 async function checkServiceThenPower({ client, server, fetcher, tcpConnector, now }) {
@@ -249,13 +228,13 @@ export async function runMonitorOnce({ repo, fetcher = (input, init) => globalTh
     if (shouldReboot(nextRuntime, server, settings, now, rebootWindow, recentRebootCount)) {
       const action = probe.recoveryAction === undefined ? 'reboot' : probe.recoveryAction;
       if (action !== 'none') {
-        const rebooting = applyRecoveryAttemptStart(nextRuntime, now, rebootWindow, recentRebootCount);
+        const rebooting = applyRebootStart(nextRuntime, now);
         const startLabel = action === 'power_on' ? '触发开机' : '触发重启';
         const doneLabel = action === 'power_on' ? '开机指令已发送' : '重启指令已发送';
         await recordTransition(repo, notifier, server, nextRuntime.state, rebooting, now, { label: startLabel });
         const success = action === 'power_on' ? await client.powerOn(server.id, now) : await client.hardReboot(server.id, now);
         if (success) {
-          const recovering = applyRecoveryAttemptSuccess(rebooting, now);
+          const recovering = applyRebootSuccess(rebooting, now, rebootWindow, recentRebootCount);
           await recordTransition(repo, notifier, server, rebooting.state, recovering, now, { label: doneLabel });
           nextRuntime = recovering;
         } else {
