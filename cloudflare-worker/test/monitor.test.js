@@ -20,7 +20,11 @@ class FakeRepo {
   async addEvent(event) { this.events.push(event); }
   async countRecentReboots(id, since) {
     this.recentRebootQuery = { id, since };
-    return this.data.recentReboots?.[id] ?? 0;
+    return this.data.recentReboots?.[id] ?? this.events.filter((event) => (
+      String(event.server_id) === String(id)
+      && event.new_state === 'rebooting'
+      && event.created_at >= since
+    )).length;
   }
   async pruneCheckResults(retentionDays, now) {
     this.pruneCheckResultsCall = { retentionDays, now };
@@ -485,4 +489,123 @@ test('runMonitorOnce 按设置清理过期原始探测结果', async () => {
   await runMonitorOnce({ repo, fetcher: async () => new Response('{}'), now: 1778382000 });
 
   assert.deepEqual(repo.pruneCheckResultsCall, { retentionDays: 45, now: 1778382000 });
+});
+
+test('runMonitorOnce treats non-definitive API-only statuses as non-actionable', async (t) => {
+  const cases = [
+    { name: 'unknown', response: new Response(JSON.stringify({ data: { status: 'unknown' } })) },
+    { name: 'empty', response: new Response(JSON.stringify({ data: { status: '' } })) },
+    { name: 'unexpected', response: new Response(JSON.stringify({ data: { status: 'starting' } })) },
+    { name: 'API error', error: new Error('api timeout') },
+  ];
+
+  for (const item of cases) {
+    await t.test(item.name, async () => {
+      const repo = new FakeRepo({
+        settings: {
+          suspect_threshold: 3,
+          reboot_cooldown: 300,
+          recover_timeout: 300,
+          default_daily_reboot_limit: 3,
+          api_timeout: 60,
+          timezone: 'Asia/Shanghai',
+          check_interval: 300,
+        },
+        providers: {
+          heyun: { name: 'heyun', api_base_url: 'https://api.example/v1', jwt_token: 'jwt', jwt_expire_at: 9999999999 },
+        },
+        servers: [{ id: '4075', name: 'API', provider: 'heyun', check_method: 'api_only', daily_reboot_limit: 3 }],
+        runtimes: {
+          4075: {
+            state: 'suspect',
+            consecutive_failures: 2,
+            consecutive_successes: 0,
+            last_check_time: 0,
+            last_reboot_time: 0,
+            reboot_count_today: 0,
+            reboot_date: '',
+            last_status_value: '',
+            state_changed_at: 1000,
+            first_failure_at: 1000,
+            reboot_initiated_at: 0,
+            scheduled_reboot_date: '',
+          },
+        },
+      });
+      const calls = [];
+      const fetcher = async (url) => {
+        calls.push(String(url));
+        if (String(url).includes('/module/status')) {
+          if (item.error) throw item.error;
+          return item.response;
+        }
+        return new Response(JSON.stringify({ msg: 'success' }));
+      };
+
+      await runMonitorOnce({ repo, fetcher, now: 1778382000 });
+
+      assert.equal(repo.data.runtimes['4075'].state, 'suspect');
+      assert.equal(repo.data.runtimes['4075'].consecutive_failures, 2);
+      assert.equal(calls.some((url) => url.includes('/module/on')), false);
+      assert.equal(calls.some((url) => url.includes('/hard_reboot')), false);
+      assert.equal(repo.events.length, 0);
+    });
+  }
+});
+
+test('runMonitorOnce counts a failed power-on attempt and enforces cooldown and action limit', async () => {
+  const repo = new FakeRepo({
+    settings: {
+      suspect_threshold: 3,
+      reboot_cooldown: 300,
+      recover_timeout: 300,
+      default_daily_reboot_limit: 1,
+      reboot_limit_window: 'hour',
+      api_timeout: 60,
+      timezone: 'Asia/Shanghai',
+      check_interval: 300,
+    },
+    providers: {
+      heyun: { name: 'heyun', api_base_url: 'https://api.example/v1', jwt_token: 'jwt', jwt_expire_at: 9999999999 },
+    },
+    servers: [{ id: '4075', name: 'API', provider: 'heyun', check_method: 'api_only', daily_reboot_limit: 1 }],
+    runtimes: {
+      4075: {
+        state: 'down',
+        consecutive_failures: 3,
+        consecutive_successes: 0,
+        last_check_time: 0,
+        last_reboot_time: 0,
+        reboot_count_today: 0,
+        reboot_date: '',
+        last_status_value: 'off',
+        state_changed_at: 1000,
+        first_failure_at: 1000,
+        reboot_initiated_at: 0,
+        scheduled_reboot_date: '',
+      },
+    },
+  });
+  const calls = [];
+  const fetcher = async (url) => {
+    calls.push(String(url));
+    if (String(url).includes('/module/status')) return new Response(JSON.stringify({ data: { status: 'off' } }));
+    if (String(url).includes('/module/on')) return new Response(JSON.stringify({ status: 500, msg: 'rejected' }));
+    return new Response(JSON.stringify({ jwt: 'jwt' }));
+  };
+  const firstNow = 1778382000;
+
+  await runMonitorOnce({ repo, fetcher, now: firstNow, date: new Date(firstNow * 1000) });
+
+  assert.equal(repo.data.runtimes['4075'].state, 'down');
+  assert.equal(repo.data.runtimes['4075'].last_reboot_time, firstNow);
+  assert.equal(repo.data.runtimes['4075'].reboot_initiated_at, firstNow);
+  assert.equal(repo.data.runtimes['4075'].reboot_count_today, 1);
+  assert.equal(repo.events.filter((event) => event.new_state === 'rebooting').length, 1);
+
+  await runMonitorOnce({ repo, fetcher, now: firstNow + 60, date: new Date((firstNow + 60) * 1000), force: true });
+  await runMonitorOnce({ repo, fetcher, now: firstNow + 301, date: new Date((firstNow + 301) * 1000), force: true });
+
+  assert.equal(calls.filter((url) => url.includes('/module/on')).length, 1);
+  assert.equal(repo.data.runtimes['4075'].reboot_count_today, 1);
 });
